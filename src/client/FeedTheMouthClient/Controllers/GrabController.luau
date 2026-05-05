@@ -5,23 +5,23 @@ GrabController.Name = "GrabController"
 
 function GrabController:Init(context)
 	self.Context = context
-	self.RequestGrab = context.remotes:WaitForChild("RequestGrab")
-	self.RequestRelease = context.remotes:WaitForChild("RequestRelease")
-	self.RequestThrow = context.remotes:WaitForChild("RequestThrow")
+	self.RequestGrabRemote = context.remotes:WaitForChild("RequestGrab")
+	self.RequestReleaseRemote = context.remotes:WaitForChild("RequestRelease")
+	self.RequestThrowRemote = context.remotes:WaitForChild("RequestThrow")
 end
 
 function GrabController:Start() end
 
 function GrabController:RequestGrab(feedable: Instance)
-	self.RequestGrab:FireServer(feedable)
+	self.RequestGrabRemote:FireServer(feedable)
 end
 
 function GrabController:RequestRelease()
-	self.RequestRelease:FireServer()
+	self.RequestReleaseRemote:FireServer()
 end
 
 function GrabController:RequestThrow(direction: Vector3)
-	self.RequestThrow:FireServer(direction)
+	self.RequestThrowRemote:FireServer(direction)
 end
 
 return GrabController

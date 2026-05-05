@@ -64,4 +64,59 @@ function FeedableService:IsFeedable(instance: Instance): boolean
 	return instance:GetAttribute(self.Constants.ATTRIBUTES.Feedable) == true
 end
 
+function FeedableService:FindFeedableFromInstance(instance: Instance): Instance?
+	local current: Instance? = instance
+	local candidate: Instance? = nil
+
+	while current ~= nil and current ~= Workspace do
+		if self:IsFeedable(current) then
+			candidate = current
+		end
+
+		current = current.Parent
+	end
+
+	return candidate
+end
+
+function FeedableService:GetRootPart(feedable: Instance): BasePart?
+	if feedable:IsA("BasePart") then
+		return feedable
+	end
+
+	if not feedable:IsA("Model") then
+		return nil
+	end
+
+	if feedable.PrimaryPart ~= nil then
+		return feedable.PrimaryPart
+	end
+
+	local rootPart = feedable:FindFirstChildWhichIsA("BasePart", true)
+	if rootPart ~= nil then
+		feedable.PrimaryPart = rootPart
+	end
+
+	return rootPart
+end
+
+function FeedableService:GetBaseParts(feedable: Instance): {BasePart}
+	if feedable:IsA("BasePart") then
+		return { feedable }
+	end
+
+	if not feedable:IsA("Model") then
+		return {}
+	end
+
+	local parts = {}
+	for _, descendant in ipairs(feedable:GetDescendants()) do
+		if descendant:IsA("BasePart") then
+			table.insert(parts, descendant)
+		end
+	end
+
+	return parts
+end
+
 return FeedableService

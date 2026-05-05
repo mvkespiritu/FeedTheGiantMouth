@@ -1,0 +1,10 @@
+# Project place file
+/FeedTheGiantMouth.rbxlx
+/FeedTheGiantMouth.rbxl
+
+# Roblox Studio lock files
+/*.rbxlx.lock
+/*.rbxl.lock
+
+# Generated Rojo output
+sourcemap.json

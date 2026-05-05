@@ -10,7 +10,8 @@ function UIController:Init(context)
 	self.Constants = require(context.shared.Constants)
 	self.PlayerDataChanged = context.remotes:WaitForChild("PlayerDataChanged")
 	self.RewardMessageId = 0
-	self.LockMessageId = 0
+	self.StatusMessageId = 0
+	self.CurrentPlayerData = nil
 end
 
 function UIController:Start()
@@ -29,6 +30,8 @@ function UIController:Start()
 end
 
 function UIController:RenderPlayerData(data)
+	self.CurrentPlayerData = data
+
 	if self.CoinsLabel ~= nil then
 		self.CoinsLabel.Text = `Coins: {data.coins or 0}`
 	end
@@ -51,16 +54,20 @@ function UIController:ShowReward(amount: number)
 end
 
 function UIController:ShowLockMessage(requiredStrength: number)
-	self.LockMessageId += 1
-	local messageId = self.LockMessageId
+	self:ShowStatusMessage(`Requires Strength {requiredStrength}`)
+end
+
+function UIController:ShowStatusMessage(message: string)
+	self.StatusMessageId += 1
+	local messageId = self.StatusMessageId
 
 	if self.LockMessageLabel ~= nil and self.LockMessageLabel:IsA("TextLabel") then
-		self.LockMessageLabel.Text = `Requires Strength {requiredStrength}`
+		self.LockMessageLabel.Text = message
 		self.LockMessageLabel.Visible = true
 	end
 
 	task.delay(1.5, function()
-		if self.LockMessageId == messageId and self.LockMessageLabel ~= nil then
+		if self.StatusMessageId == messageId and self.LockMessageLabel ~= nil then
 			self.LockMessageLabel.Text = ""
 		end
 	end)

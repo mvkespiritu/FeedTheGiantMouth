@@ -4,19 +4,175 @@
     "$className": "DataModel",
 
     "ReplicatedStorage": {
-      "$path": "src/shared",
-      "$ignoreUnknownInstances": true
+      "$ignoreUnknownInstances": true,
+
+      "FeedTheMouth": {
+        "$className": "Folder",
+
+        "Shared": {
+          "$path": "src/shared/FeedTheMouth/Shared"
+        },
+
+        "Remotes": {
+          "$className": "Folder",
+
+          "RequestGrab": {
+            "$className": "RemoteEvent"
+          },
+          "RequestRelease": {
+            "$className": "RemoteEvent"
+          },
+          "RequestThrow": {
+            "$className": "RemoteEvent"
+          },
+          "RequestUpgrade": {
+            "$className": "RemoteEvent"
+          },
+          "PlayerDataChanged": {
+            "$className": "RemoteEvent"
+          },
+          "PlayFeedback": {
+            "$className": "RemoteEvent"
+          }
+        }
+      }
     },
 
     "ServerScriptService": {
-      "$path": "src/server",
-      "$ignoreUnknownInstances": true
+      "$ignoreUnknownInstances": true,
+
+      "FeedTheMouthServer": {
+        "$className": "Folder",
+
+        "Bootstrap": {
+          "$path": "src/server/FeedTheMouthServer/Bootstrap.server.luau"
+        },
+
+        "Services": {
+          "$path": "src/server/FeedTheMouthServer/Services"
+        }
+      }
     },
 
     "StarterPlayer": {
       "StarterPlayerScripts": {
-        "$path": "src/client",
-        "$ignoreUnknownInstances": true
+        "$ignoreUnknownInstances": true,
+
+        "FeedTheMouthClient": {
+          "$className": "Folder",
+
+          "Bootstrap": {
+            "$path": "src/client/FeedTheMouthClient/Bootstrap.client.luau"
+          },
+
+          "Controllers": {
+            "$path": "src/client/FeedTheMouthClient/Controllers"
+          }
+        }
+      }
+    },
+
+    "StarterGui": {
+      "$ignoreUnknownInstances": true,
+
+      "MainHUD": {
+        "$className": "ScreenGui",
+
+        "HUDFrame": {
+          "$className": "Frame",
+
+          "CoinsLabel": {
+            "$className": "TextLabel"
+          },
+
+          "UpgradeLevelsFrame": {
+            "$className": "Frame"
+          },
+
+          "UpgradeButton": {
+            "$className": "TextButton"
+          }
+        },
+
+        "UpgradeShopFrame": {
+          "$className": "Frame",
+
+          "StrengthButton": {
+            "$className": "TextButton"
+          },
+
+          "CarryCapacityButton": {
+            "$className": "TextButton"
+          },
+
+          "ThrowPowerButton": {
+            "$className": "TextButton"
+          },
+
+          "ValueMultiplierButton": {
+            "$className": "TextButton"
+          }
+        },
+
+        "FeedbackFrame": {
+          "$className": "Frame",
+
+          "RewardPopupTemplate": {
+            "$className": "TextLabel"
+          },
+
+          "LockMessageLabel": {
+            "$className": "TextLabel"
+          }
+        }
+      }
+    },
+
+    "Workspace": {
+      "$ignoreUnknownInstances": true,
+
+      "FeedTheMouthWorld": {
+        "$className": "Folder",
+
+        "Arena": {
+          "$className": "Folder",
+
+          "Spawn": {
+            "$className": "SpawnLocation"
+          }
+        },
+
+        "Mouth": {
+          "$className": "Folder",
+
+          "MouthModel": {
+            "$className": "Model"
+          },
+
+          "EatZone": {
+            "$className": "Part"
+          }
+        },
+
+        "FeedableObjects": {
+          "$className": "Folder",
+
+          "Small": {
+            "$className": "Folder"
+          },
+
+          "Medium": {
+            "$className": "Folder"
+          },
+
+          "Large": {
+            "$className": "Folder"
+          },
+
+          "Absurd": {
+            "$className": "Folder"
+          }
+        }
       }
     }
   }

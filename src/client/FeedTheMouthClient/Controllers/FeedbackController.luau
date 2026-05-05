@@ -15,6 +15,8 @@ function FeedbackController:Start()
 end
 
 function FeedbackController:HandleFeedback(feedbackName: string, payload)
+	payload = payload or {}
+
 	if feedbackName == "Reward" then
 		local uiController = self.Context.controllers.UIController
 		if uiController ~= nil then

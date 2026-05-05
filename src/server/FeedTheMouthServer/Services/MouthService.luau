@@ -1,9 +1,12 @@
 --!strict
 
+local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
 
 local MouthService = {}
 MouthService.Name = "MouthService"
+
+local FEEDER_FALLBACK_RADIUS = 40
 
 function MouthService:Init(context)
 	self.Context = context
@@ -17,6 +20,7 @@ function MouthService:Start()
 		return
 	end
 
+	eatZone.CanTouch = true
 	eatZone.Touched:Connect(function(hit)
 		self:TryEat(hit)
 	end)
@@ -35,9 +39,9 @@ function MouthService:GetEatZone(): BasePart?
 end
 
 function MouthService:TryEat(hit: BasePart)
-	local feedable = hit:FindFirstAncestorWhichIsA("Model") or hit
 	local feedableService = self.Context.services.FeedableService
-	if not feedableService:IsFeedable(feedable) then
+	local feedable = feedableService:FindFeedableFromInstance(hit)
+	if feedable == nil then
 		return
 	end
 
@@ -46,22 +50,72 @@ function MouthService:TryEat(hit: BasePart)
 		return
 	end
 
-	feedable:SetAttribute(attributes.Consumed, true)
+	self:MarkConsumed(feedable)
 
-	local userId = feedable:GetAttribute(attributes.LastHolderUserId)
-	local player = if typeof(userId) == "number" then game.Players:GetPlayerByUserId(userId) else nil
+	local player = self:GetFeeder(feedable, hit.Position)
+	local reward = 0
 	if player ~= nil then
-		local reward = self.Context.services.EconomyService:AwardFeedReward(player, feedable)
+		reward = self.Context.services.EconomyService:AwardFeedReward(player, feedable)
 		self.Context.services.FeedbackService:Play(player, "Reward", {
 			amount = reward,
+			tier = feedable:GetAttribute(attributes.Tier),
 		})
 	end
 
 	self.Context.services.FeedbackService:PlayForAll("MouthEat", {
 		position = hit.Position,
+		reward = reward,
+		tier = feedable:GetAttribute(attributes.Tier),
 	})
 
-	feedable:Destroy()
+	task.defer(function()
+		if feedable.Parent ~= nil then
+			feedable:Destroy()
+		end
+	end)
+end
+
+function MouthService:MarkConsumed(feedable: Instance)
+	local attributes = self.Constants.ATTRIBUTES
+	feedable:SetAttribute(attributes.Consumed, true)
+
+	local feedableService = self.Context.services.FeedableService
+	for _, part in ipairs(feedableService:GetBaseParts(feedable)) do
+		part.CanTouch = false
+		part.CanCollide = false
+		part:SetAttribute(attributes.Consumed, true)
+	end
+end
+
+function MouthService:GetFeeder(feedable: Instance, position: Vector3): Player?
+	local userId = feedable:GetAttribute(self.Constants.ATTRIBUTES.LastHolderUserId)
+	if typeof(userId) == "number" then
+		local player = Players:GetPlayerByUserId(userId)
+		if player ~= nil then
+			return player
+		end
+	end
+
+	return self:GetNearestPlayer(position, FEEDER_FALLBACK_RADIUS)
+end
+
+function MouthService:GetNearestPlayer(position: Vector3, maxDistance: number): Player?
+	local nearestPlayer = nil
+	local nearestDistance = maxDistance
+
+	for _, player in ipairs(Players:GetPlayers()) do
+		local character = player.Character
+		local rootPart = if character ~= nil then character:FindFirstChild("HumanoidRootPart") else nil
+		if rootPart ~= nil and rootPart:IsA("BasePart") then
+			local distance = (rootPart.Position - position).Magnitude
+			if distance <= nearestDistance then
+				nearestPlayer = player
+				nearestDistance = distance
+			end
+		end
+	end
+
+	return nearestPlayer
 end
 
 return MouthService

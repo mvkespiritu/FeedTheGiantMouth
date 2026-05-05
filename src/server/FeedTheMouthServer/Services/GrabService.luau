@@ -7,6 +7,9 @@ GrabService.Name = "GrabService"
 
 local HOLD_DISTANCE = 6
 local MAX_GRAB_DISTANCE = 24
+local BASE_THROW_SPEED = 75
+local THROW_POWER_PER_LEVEL = 10
+local THROW_UPWARD_SPEED = 14
 local INTERNAL_WELD_NAME = "FeedTheMouthInternalWeld"
 local HOLD_WELD_NAME = "FeedTheMouthHoldWeld"
 
@@ -39,6 +42,11 @@ end
 
 function GrabService:RequestGrab(player, feedable)
 	if typeof(feedable) ~= "Instance" then
+		return
+	end
+
+	if self.HeldByPlayer[player] ~= nil then
+		self:RequestThrow(player)
 		return
 	end
 
@@ -135,13 +143,24 @@ function GrabService:AttachInFrontOfCharacter(player, feedable: Instance, rootPa
 	self.HeldByPlayer[player] = {
 		feedable = feedable,
 		holdWeld = weld,
+		rootPart = rootPart,
 	}
 end
 
-function GrabService:ClearHeld(player)
+function GrabService:RestoreFeedablePhysics(feedable: Instance)
+	local feedableService = self.Context.services.FeedableService
+	local parts = feedableService:GetBaseParts(feedable)
+
+	for _, part in ipairs(parts) do
+		part.CanCollide = true
+		part.Massless = false
+	end
+end
+
+function GrabService:ClearHeld(player): any?
 	local held = self.HeldByPlayer[player]
 	if held == nil then
-		return
+		return nil
 	end
 
 	local holdWeld = held.holdWeld
@@ -150,10 +169,41 @@ function GrabService:ClearHeld(player)
 	end
 
 	self.HeldByPlayer[player] = nil
+	if typeof(held.feedable) == "Instance" and held.feedable.Parent ~= nil then
+		self:RestoreFeedablePhysics(held.feedable)
+	end
+
+	return held
 end
 
 function GrabService:RequestRelease(_player) end
 
-function GrabService:RequestThrow(_player, _direction) end
+function GrabService:RequestThrow(player, direction)
+	local held = self:ClearHeld(player)
+	if held == nil then
+		return
+	end
+
+	local rootPart = held.rootPart
+	if typeof(rootPart) ~= "Instance" or not rootPart:IsA("BasePart") or rootPart.Parent == nil then
+		return
+	end
+
+	local character = player.Character
+	local humanoidRootPart = if character ~= nil then character:FindFirstChild("HumanoidRootPart") else nil
+	local throwDirection = if typeof(direction) == "Vector3" and direction.Magnitude > 0.05
+		then direction.Unit
+		elseif humanoidRootPart ~= nil and humanoidRootPart:IsA("BasePart")
+		then humanoidRootPart.CFrame.LookVector
+		else Vector3.new(0, 0, -1)
+
+	local throwPowerLevel = self.Context.services.PlayerDataService:GetUpgradeLevel(player, "ThrowPower")
+	local speed = BASE_THROW_SPEED + ((throwPowerLevel - 1) * THROW_POWER_PER_LEVEL)
+	rootPart.AssemblyLinearVelocity = (throwDirection * speed) + Vector3.new(0, THROW_UPWARD_SPEED, 0)
+
+	pcall(function()
+		rootPart:SetNetworkOwner(nil)
+	end)
+end
 
 return GrabService

@@ -17,7 +17,7 @@ end
 function InputController:Start()
 	local mouse = self.LocalPlayer:GetMouse()
 	mouse.Button1Down:Connect(function()
-		self:TryGrabFromInstance(mouse.Target)
+		self:HandlePrimaryAction(mouse.Target)
 	end)
 
 	UserInputService.InputBegan:Connect(function(input, gameProcessed)
@@ -26,14 +26,14 @@ function InputController:Start()
 		end
 
 		if input.KeyCode == Enum.KeyCode.E then
-			self:TryGrabFromInstance(mouse.Target)
+			self:HandlePrimaryAction(mouse.Target)
 		elseif input.UserInputType == Enum.UserInputType.Touch then
-			self:TryGrabFromScreenPosition(input.Position)
+			self:HandlePrimaryActionFromScreenPosition(input.Position)
 		end
 	end)
 end
 
-function InputController:TryGrabFromScreenPosition(screenPosition: Vector3)
+function InputController:HandlePrimaryActionFromScreenPosition(screenPosition: Vector3)
 	local camera = Workspace.CurrentCamera
 	if camera == nil then
 		return
@@ -51,27 +51,38 @@ function InputController:TryGrabFromScreenPosition(screenPosition: Vector3)
 
 	local result = Workspace:Raycast(ray.Origin, ray.Direction * 500, raycastParams)
 	if result ~= nil then
-		self:TryGrabFromInstance(result.Instance)
+		self:HandlePrimaryAction(result.Instance)
+	else
+		self:RequestThrow()
 	end
 end
 
-function InputController:TryGrabFromInstance(instance: Instance?)
-	if instance == nil then
-		return
-	end
-
+function InputController:HandlePrimaryAction(instance: Instance?)
 	local now = os.clock()
 	if now - self.LastGrabRequest < 0.15 then
 		return
 	end
 
-	local feedable = self:FindFeedable(instance)
-	if feedable == nil then
+	self.LastGrabRequest = now
+
+	if instance == nil then
+		self:RequestThrow()
 		return
 	end
 
-	self.LastGrabRequest = now
+	local feedable = self:FindFeedable(instance)
+	if feedable == nil then
+		self:RequestThrow()
+		return
+	end
+
 	self.Context.controllers.GrabController:RequestGrab(feedable)
+end
+
+function InputController:RequestThrow()
+	local camera = Workspace.CurrentCamera
+	local direction = if camera ~= nil then camera.CFrame.LookVector else Vector3.new(0, 0, -1)
+	self.Context.controllers.GrabController:RequestThrow(direction)
 end
 
 function InputController:FindFeedable(instance: Instance): Instance?

@@ -13,10 +13,13 @@ local CHEW_CLOSE_TIME = 0.12
 local CHEW_OPEN_TIME = 0.16
 local CHEW_PAUSE_TIME = 0.04
 local MOUTH_MODEL_NAME = "MouthModel"
+local CHEW_SOUND_NAME = "ChewingSound"
+local CHEW_SFX_NAME = "MouthChew"
 
 function MouthService:Init(context)
 	self.Context = context
 	self.Constants = require(context.shared.Constants)
+	self.AudioConfig = require(context.shared.AudioConfig)
 	self.LastEatTime = 0
 	self.IsChewing = false
 end
@@ -105,6 +108,9 @@ function MouthService:RunChewLoop()
 	end
 
 	local restCFrames = self:CaptureMouthCFrames(mouthModel)
+	local chewSound = self:GetChewSound(mouthModel)
+	self:PlayChewSound(chewSound)
+
 	while true do
 		while os.clock() - self.LastEatTime <= CHEW_IDLE_TIMEOUT do
 			self:TweenMouth(restCFrames, true, CHEW_CLOSE_TIME)
@@ -120,6 +126,7 @@ function MouthService:RunChewLoop()
 		end
 	end
 
+	self:StopChewSound(chewSound)
 	self.IsChewing = false
 end
 
@@ -144,6 +151,50 @@ function MouthService:CaptureMouthCFrames(mouthModel: Model): {[BasePart]: CFram
 	end
 
 	return restCFrames
+end
+
+function MouthService:GetChewSound(mouthModel: Model): Sound
+	local existingSound = mouthModel:FindFirstChild(CHEW_SOUND_NAME, true)
+	if existingSound ~= nil and existingSound:IsA("Sound") then
+		return existingSound
+	end
+
+	local chewSound = Instance.new("Sound")
+	local chewConfig = self.AudioConfig.SFX[CHEW_SFX_NAME]
+	chewSound.Name = CHEW_SOUND_NAME
+	chewSound.SoundId = chewConfig.soundId
+	chewSound.Volume = chewConfig.volume or 1
+	chewSound.Looped = if chewConfig.looped ~= nil then chewConfig.looped else true
+	chewSound.RollOffMaxDistance = chewConfig.rollOffMaxDistance or 120
+	chewSound.Parent = self:GetChewSoundParent(mouthModel)
+
+	return chewSound
+end
+
+function MouthService:GetChewSoundParent(mouthModel: Model): Instance
+	local mouthBack = mouthModel:FindFirstChild("MouthBack")
+	if mouthBack ~= nil and mouthBack:IsA("BasePart") then
+		return mouthBack
+	end
+
+	local firstPart = mouthModel:FindFirstChildWhichIsA("BasePart", true)
+	if firstPart ~= nil then
+		return firstPart
+	end
+
+	return mouthModel
+end
+
+function MouthService:PlayChewSound(chewSound: Sound)
+	if not chewSound.IsPlaying then
+		chewSound:Play()
+	end
+end
+
+function MouthService:StopChewSound(chewSound: Sound)
+	if chewSound.IsPlaying then
+		chewSound:Stop()
+	end
 end
 
 function MouthService:GetChewOffset(partName: string): Vector3

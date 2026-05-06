@@ -42,6 +42,13 @@ AudioConfig.SFX = table.freeze({
 		rollOffMaxDistance = 120,
 		spatial = true,
 	},
+	MouthChew = {
+		soundId = "rbxassetid://116029286458241",
+		volume = 8.5,
+		looped = true,
+		rollOffMaxDistance = 220,
+		spatial = true,
+	},
 	Reward = {
 		soundId = "rbxassetid://134612482016650",
 		volume = 0.75,

@@ -59,6 +59,20 @@ function UpgradeShopController:RequestUpgrade(upgradeId: string)
 	self.RequestUpgradeRemote:FireServer(upgradeId)
 end
 
+function UpgradeShopController:RenderButton(button: TextButton, displayName: string, priceText: string)
+	local nameLabel = button:FindFirstChild("NameLabel")
+	local priceLabel = button:FindFirstChild("PriceLabel")
+
+	if nameLabel ~= nil and nameLabel:IsA("TextLabel") and priceLabel ~= nil and priceLabel:IsA("TextLabel") then
+		button.Text = ""
+		nameLabel.Text = displayName
+		priceLabel.Text = priceText
+		return
+	end
+
+	button.Text = displayName .. string.char(10) .. priceText
+end
+
 function UpgradeShopController:Render(data)
 	local upgrades = if data ~= nil and data.upgrades ~= nil then data.upgrades else {}
 	local coins = if data ~= nil and typeof(data.coins) == "number" then data.coins else 0
@@ -73,10 +87,10 @@ function UpgradeShopController:Render(data)
 		local cost = self.UpgradeConfig.getCost(upgradeId, currentLevel)
 
 		if cost == nil then
-			button.Text = `{definition.displayName}\nLv {currentLevel}/{definition.maxLevel}\nMAX`
+			self:RenderButton(button, definition.displayName, "MAX")
 			button.AutoButtonColor = false
 		else
-			button.Text = `{definition.displayName}\nLv {currentLevel}/{definition.maxLevel}\nCost: {cost}`
+			self:RenderButton(button, definition.displayName, tostring(cost) .. " COINS")
 			button.AutoButtonColor = coins >= cost
 		end
 	end

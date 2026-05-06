@@ -239,13 +239,14 @@ end
 
 function RespawnService:PlaceFeedable(feedable: Instance, spawnArea: BasePart)
 	local feedableSize = self:GetFeedableSize(feedable)
+	local pivotToBottomOffset = self:GetPivotToBottomOffset(feedable)
 	local paddingX = math.min(spawnArea.Size.X * 0.45, (feedableSize.X * 0.5) + 2)
 	local paddingZ = math.min(spawnArea.Size.Z * 0.45, (feedableSize.Z * 0.5) + 2)
 	local usableX = math.max(0, (spawnArea.Size.X * 0.5) - paddingX)
 	local usableZ = math.max(0, (spawnArea.Size.Z * 0.5) - paddingZ)
 	local localX = self.Random:NextNumber(-usableX, usableX)
 	local localZ = self.Random:NextNumber(-usableZ, usableZ)
-	local y = (spawnArea.Size.Y * 0.5) + (feedableSize.Y * 0.5) + 0.1
+	local y = (spawnArea.Size.Y * 0.5) + pivotToBottomOffset + 0.1
 	local yaw = math.rad(self.Random:NextNumber(0, 360))
 	local cframe = spawnArea.CFrame * CFrame.new(localX, y, localZ) * CFrame.Angles(0, yaw, 0)
 
@@ -267,6 +268,20 @@ function RespawnService:GetFeedableSize(feedable: Instance): Vector3
 	end
 
 	return Vector3.one
+end
+
+function RespawnService:GetPivotToBottomOffset(feedable: Instance): number
+	if feedable:IsA("BasePart") then
+		return feedable.Size.Y * 0.5
+	end
+
+	if feedable:IsA("Model") then
+		local cframe, size = feedable:GetBoundingBox()
+		local bottomY = cframe.Position.Y - (size.Y * 0.5)
+		return feedable:GetPivot().Position.Y - bottomY
+	end
+
+	return 0.5
 end
 
 return RespawnService

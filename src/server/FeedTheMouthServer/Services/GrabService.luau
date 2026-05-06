@@ -10,9 +10,9 @@ local MAX_GRAB_DISTANCE = 24
 local HOLD_HORIZONTAL_SPACING = 3.25
 local HOLD_VERTICAL_SPACING = 2.25
 local HOLD_DEPTH_SPACING = 1.25
-local BASE_THROW_SPEED = 75
-local THROW_POWER_PER_LEVEL = 10
-local THROW_UPWARD_SPEED = 14
+local BASE_THROW_SPEED = 93.75
+local THROW_POWER_PER_LEVEL = 12.5
+local THROW_UPWARD_SPEED = 50
 local DEFAULT_WALK_SPEED = 16
 local MIN_WALK_SPEED_MULTIPLIER = 0.45
 local WEIGHT_SPEED_PENALTY_PER_UNIT = 0.03
@@ -219,7 +219,7 @@ function GrabService:RestoreFeedablePhysics(feedable: Instance)
 	end
 end
 
-function GrabService:GetHeldList(player): {any}
+function GrabService:GetHeldList(player): { any }
 	local heldList = self.HeldByPlayer[player]
 	if heldList == nil then
 		heldList = {}
@@ -307,11 +307,8 @@ function GrabService:UpdatePlayerHandling(player)
 		return
 	end
 
-	local speedMultiplier = math.clamp(
-		1 - (effectiveWeight * WEIGHT_SPEED_PENALTY_PER_UNIT),
-		MIN_WALK_SPEED_MULTIPLIER,
-		1
-	)
+	local speedMultiplier =
+		math.clamp(1 - (effectiveWeight * WEIGHT_SPEED_PENALTY_PER_UNIT), MIN_WALK_SPEED_MULTIPLIER, 1)
 	humanoid.WalkSpeed = baseWalkSpeed * speedMultiplier
 end
 
@@ -373,7 +370,7 @@ function GrabService:DetachHeldEntry(held)
 	end
 end
 
-function GrabService:ClearHeld(player): {any}
+function GrabService:ClearHeld(player): { any }
 	local heldList = self:GetHeldList(player)
 	local released = {}
 
@@ -420,7 +417,8 @@ function GrabService:ApplyThrowVelocity(player, held, direction)
 	local strengthLevel = self.Context.services.PlayerDataService:GetUpgradeLevel(player, "Strength")
 	local strengthReduction = math.max(0, strengthLevel - 1) * STRENGTH_WEIGHT_REDUCTION_PER_LEVEL
 	local effectiveWeight = math.max(0, heldWeight - strengthReduction)
-	local throwMultiplier = math.clamp(1 - (effectiveWeight * THROW_WEIGHT_PENALTY_PER_UNIT), MIN_THROW_SPEED_MULTIPLIER, 1)
+	local throwMultiplier =
+		math.clamp(1 - (effectiveWeight * THROW_WEIGHT_PENALTY_PER_UNIT), MIN_THROW_SPEED_MULTIPLIER, 1)
 	speed *= throwMultiplier
 	rootPart.AssemblyLinearVelocity = (throwDirection * speed) + Vector3.new(0, THROW_UPWARD_SPEED, 0)
 

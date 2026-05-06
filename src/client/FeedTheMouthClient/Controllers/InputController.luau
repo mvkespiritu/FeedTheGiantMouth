@@ -7,19 +7,19 @@ local Workspace = game:GetService("Workspace")
 local InputController = {}
 InputController.Name = "InputController"
 
+local TOUCH_TAP_MAX_MOVEMENT = 18
+local TOUCH_TAP_MAX_DURATION = 0.75
+
 function InputController:Init(context)
 	self.Context = context
 	self.Constants = require(context.shared.Constants)
 	self.LocalPlayer = Players.LocalPlayer
 	self.LastGrabRequest = 0
+	self.ActiveTouches = {}
 end
 
 function InputController:Start()
 	local mouse = self.LocalPlayer:GetMouse()
-	mouse.Button1Down:Connect(function()
-		self:HandlePrimaryAction(mouse.Target)
-	end)
-
 	UserInputService.InputBegan:Connect(function(input, gameProcessed)
 		if gameProcessed then
 			return
@@ -27,10 +27,70 @@ function InputController:Start()
 
 		if input.KeyCode == Enum.KeyCode.E then
 			self:HandlePrimaryAction(mouse.Target)
+		elseif input.UserInputType == Enum.UserInputType.MouseButton1 then
+			self:HandlePrimaryAction(mouse.Target)
 		elseif input.UserInputType == Enum.UserInputType.Touch then
-			self:HandlePrimaryActionFromScreenPosition(input.Position)
+			self:TrackTouchStart(input)
 		end
 	end)
+
+	UserInputService.InputChanged:Connect(function(input, gameProcessed)
+		if input.UserInputType == Enum.UserInputType.Touch then
+			self:TrackTouchMove(input, gameProcessed)
+		end
+	end)
+
+	UserInputService.InputEnded:Connect(function(input, _gameProcessed)
+		if input.UserInputType == Enum.UserInputType.Touch then
+			self:TrackTouchEnd(input)
+		end
+	end)
+end
+
+function InputController:TrackTouchStart(input: InputObject)
+	self.ActiveTouches[input] = {
+		startPosition = input.Position,
+		lastPosition = input.Position,
+		startTime = os.clock(),
+		moved = false,
+	}
+end
+
+function InputController:TrackTouchMove(input: InputObject, gameProcessed: boolean)
+	local touch = self.ActiveTouches[input]
+	if touch == nil then
+		return
+	end
+
+	touch.lastPosition = input.Position
+	if gameProcessed or (input.Position - touch.startPosition).Magnitude > TOUCH_TAP_MAX_MOVEMENT then
+		touch.moved = true
+	end
+end
+
+function InputController:TrackTouchEnd(input: InputObject)
+	local touch = self.ActiveTouches[input]
+	self.ActiveTouches[input] = nil
+
+	if touch == nil then
+		return
+	end
+
+	if touch.moved then
+		return
+	end
+
+	if os.clock() - touch.startTime > TOUCH_TAP_MAX_DURATION then
+		return
+	end
+
+	self:HandlePrimaryActionFromScreenPosition(touch.lastPosition)
+end
+
+function InputController:ClearActiveTouches()
+	for input in pairs(self.ActiveTouches) do
+		self.ActiveTouches[input] = nil
+	end
 end
 
 function InputController:HandlePrimaryActionFromScreenPosition(screenPosition: Vector3)
@@ -39,7 +99,7 @@ function InputController:HandlePrimaryActionFromScreenPosition(screenPosition: V
 		return
 	end
 
-	local ray = camera:ViewportPointToRay(screenPosition.X, screenPosition.Y)
+	local ray = camera:ScreenPointToRay(screenPosition.X, screenPosition.Y)
 	local raycastParams = RaycastParams.new()
 	raycastParams.FilterType = Enum.RaycastFilterType.Exclude
 	raycastParams.IgnoreWater = true

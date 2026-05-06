@@ -7,7 +7,7 @@ UpgradeConfig.Definitions = table.freeze({
 		displayName = "Strength",
 		defaultLevel = 1,
 		maxLevel = 4,
-		baseCost = 50,
+		baseCost = 300,
 		costMultiplier = 1.75,
 	},
 
@@ -15,7 +15,7 @@ UpgradeConfig.Definitions = table.freeze({
 		displayName = "Carry Capacity",
 		defaultLevel = 1,
 		maxLevel = 10,
-		baseCost = 40,
+		baseCost = 240,
 		costMultiplier = 1.55,
 	},
 
@@ -23,7 +23,7 @@ UpgradeConfig.Definitions = table.freeze({
 		displayName = "Throw Power",
 		defaultLevel = 1,
 		maxLevel = 10,
-		baseCost = 35,
+		baseCost = 210,
 		costMultiplier = 1.5,
 	},
 
@@ -31,7 +31,7 @@ UpgradeConfig.Definitions = table.freeze({
 		displayName = "Value Multiplier",
 		defaultLevel = 1,
 		maxLevel = 10,
-		baseCost = 75,
+		baseCost = 450,
 		costMultiplier = 1.8,
 	},
 })

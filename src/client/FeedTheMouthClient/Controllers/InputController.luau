@@ -140,8 +140,11 @@ function InputController:HandlePrimaryAction(instance: Instance?)
 end
 
 function InputController:RequestThrow()
-	local camera = Workspace.CurrentCamera
-	local direction = if camera ~= nil then camera.CFrame.LookVector else Vector3.new(0, 0, -1)
+	local character = self.LocalPlayer.Character
+	local humanoidRootPart = if character ~= nil then character:FindFirstChild("HumanoidRootPart") else nil
+	local direction = if humanoidRootPart ~= nil and humanoidRootPart:IsA("BasePart")
+		then humanoidRootPart.CFrame.LookVector
+		else Vector3.new(0, 0, -1)
 	self.Context.controllers.GrabController:RequestThrow(direction)
 end
 

@@ -28,6 +28,7 @@ function UpgradeShopController:Start()
 
 	if self.UpgradeButton:IsA("TextButton") then
 		self.UpgradeButton.Activated:Connect(function()
+			self:PlayClick()
 			self:ToggleShop()
 		end)
 	end
@@ -38,6 +39,7 @@ function UpgradeShopController:Start()
 			self.ButtonsByUpgrade[upgradeId] = button
 
 			button.Activated:Connect(function()
+				self:PlayClick()
 				self:RequestUpgrade(upgradeId)
 			end)
 		end
@@ -53,6 +55,13 @@ end
 
 function UpgradeShopController:ToggleShop()
 	self.ShopFrame.Visible = not self.ShopFrame.Visible
+end
+
+function UpgradeShopController:PlayClick()
+	local audioController = self.Context.controllers.AudioController
+	if audioController ~= nil and audioController.PlaySFX ~= nil then
+		audioController:PlaySFX("UiClick")
+	end
 end
 
 function UpgradeShopController:RequestUpgrade(upgradeId: string)

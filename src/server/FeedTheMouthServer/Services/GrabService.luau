@@ -109,6 +109,7 @@ function GrabService:RequestGrab(player, feedable)
 	self:PrepareFeedableForHold(feedable, rootPart)
 	self:AddHeldObject(player, feedable, rootPart, humanoidRootPart)
 	feedable:SetAttribute(self.Constants.ATTRIBUTES.LastHolderUserId, player.UserId)
+	self.Context.services.FeedbackService:Play(player, "GrabObject", {})
 end
 
 function GrabService:PrepareFeedableForHold(feedable: Instance, rootPart: BasePart)
@@ -435,6 +436,7 @@ function GrabService:RequestThrow(player, direction, targetFeedable: Instance?)
 	end
 
 	self:ApplyThrowVelocity(player, held, direction)
+	self.Context.services.FeedbackService:Play(player, "ThrowObject", {})
 end
 
 return GrabService

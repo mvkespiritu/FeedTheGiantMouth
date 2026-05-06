@@ -13,6 +13,12 @@ local HOLD_DEPTH_SPACING = 1.25
 local BASE_THROW_SPEED = 75
 local THROW_POWER_PER_LEVEL = 10
 local THROW_UPWARD_SPEED = 14
+local DEFAULT_WALK_SPEED = 16
+local MIN_WALK_SPEED_MULTIPLIER = 0.45
+local WEIGHT_SPEED_PENALTY_PER_UNIT = 0.03
+local STRENGTH_WEIGHT_REDUCTION_PER_LEVEL = 6
+local THROW_WEIGHT_PENALTY_PER_UNIT = 0.015
+local MIN_THROW_SPEED_MULTIPLIER = 0.55
 local INTERNAL_WELD_NAME = "FeedTheMouthInternalWeld"
 local HOLD_WELD_NAME = "FeedTheMouthHoldWeld"
 
@@ -23,6 +29,7 @@ function GrabService:Init(context)
 	self.RequestReleaseRemote = context.remotes:WaitForChild("RequestRelease")
 	self.RequestThrowRemote = context.remotes:WaitForChild("RequestThrow")
 	self.HeldByPlayer = {}
+	self.BaseWalkSpeedByPlayer = {}
 end
 
 function GrabService:Start()
@@ -40,6 +47,7 @@ function GrabService:Start()
 
 	Players.PlayerRemoving:Connect(function(player)
 		self:ClearHeld(player)
+		self.BaseWalkSpeedByPlayer[player] = nil
 	end)
 end
 
@@ -181,6 +189,8 @@ function GrabService:RepositionHeldObjects(player, humanoidRootPart: BasePart?)
 			rootPart:SetNetworkOwner(player)
 		end)
 	end
+
+	self:UpdatePlayerHandling(player)
 end
 
 function GrabService:GetHoldOffset(index: number): CFrame
@@ -233,6 +243,77 @@ function GrabService:GetHumanoidRootPart(player): BasePart?
 	return nil
 end
 
+function GrabService:GetHumanoid(player): Humanoid?
+	local character = player.Character
+	if character == nil then
+		return nil
+	end
+
+	local humanoid = character:FindFirstChildOfClass("Humanoid")
+	if humanoid ~= nil then
+		return humanoid
+	end
+
+	return nil
+end
+
+function GrabService:GetWeightFromFeedable(feedable: Instance): number
+	local weight = feedable:GetAttribute(self.Constants.ATTRIBUTES.Weight)
+	if typeof(weight) == "number" then
+		return math.max(0, weight)
+	end
+
+	return 1
+end
+
+function GrabService:GetTotalHeldWeight(player): number
+	local totalWeight = 0
+	for _, held in ipairs(self:GetHeldList(player)) do
+		if self:IsHeldEntryValid(held) then
+			totalWeight += self:GetWeightFromFeedable(held.feedable)
+		end
+	end
+
+	return totalWeight
+end
+
+function GrabService:GetEffectiveCarryWeight(player): number
+	local totalWeight = self:GetTotalHeldWeight(player)
+	if totalWeight <= 0 then
+		return 0
+	end
+
+	local strengthLevel = self.Context.services.PlayerDataService:GetUpgradeLevel(player, "Strength")
+	local strengthReduction = math.max(0, strengthLevel - 1) * STRENGTH_WEIGHT_REDUCTION_PER_LEVEL
+	return math.max(0, totalWeight - strengthReduction)
+end
+
+function GrabService:UpdatePlayerHandling(player)
+	local humanoid = self:GetHumanoid(player)
+	if humanoid == nil then
+		return
+	end
+
+	local baseWalkSpeed = self.BaseWalkSpeedByPlayer[player]
+	if typeof(baseWalkSpeed) ~= "number" or baseWalkSpeed <= 0 then
+		baseWalkSpeed = if humanoid.WalkSpeed > 0 then humanoid.WalkSpeed else DEFAULT_WALK_SPEED
+		self.BaseWalkSpeedByPlayer[player] = baseWalkSpeed
+	end
+
+	local effectiveWeight = self:GetEffectiveCarryWeight(player)
+	if effectiveWeight <= 0 then
+		humanoid.WalkSpeed = baseWalkSpeed
+		return
+	end
+
+	local speedMultiplier = math.clamp(
+		1 - (effectiveWeight * WEIGHT_SPEED_PENALTY_PER_UNIT),
+		MIN_WALK_SPEED_MULTIPLIER,
+		1
+	)
+	humanoid.WalkSpeed = baseWalkSpeed * speedMultiplier
+end
+
 function GrabService:IsHeldEntryValid(held): boolean
 	return typeof(held) == "table"
 		and typeof(held.feedable) == "Instance"
@@ -276,6 +357,7 @@ function GrabService:RemoveHeldEntry(player, targetFeedable: Instance?): any?
 
 	self:DetachHeldEntry(held)
 	self:RepositionHeldObjects(player)
+	self:UpdatePlayerHandling(player)
 	return held
 end
 
@@ -303,6 +385,7 @@ function GrabService:ClearHeld(player): {any}
 	end
 
 	self.HeldByPlayer[player] = nil
+	self:UpdatePlayerHandling(player)
 	return released
 end
 
@@ -332,6 +415,12 @@ function GrabService:ApplyThrowVelocity(player, held, direction)
 	local throwDirection = self:GetThrowDirection(player, direction)
 	local throwPowerLevel = self.Context.services.PlayerDataService:GetUpgradeLevel(player, "ThrowPower")
 	local speed = BASE_THROW_SPEED + ((throwPowerLevel - 1) * THROW_POWER_PER_LEVEL)
+	local heldWeight = self:GetWeightFromFeedable(held.feedable)
+	local strengthLevel = self.Context.services.PlayerDataService:GetUpgradeLevel(player, "Strength")
+	local strengthReduction = math.max(0, strengthLevel - 1) * STRENGTH_WEIGHT_REDUCTION_PER_LEVEL
+	local effectiveWeight = math.max(0, heldWeight - strengthReduction)
+	local throwMultiplier = math.clamp(1 - (effectiveWeight * THROW_WEIGHT_PENALTY_PER_UNIT), MIN_THROW_SPEED_MULTIPLIER, 1)
+	speed *= throwMultiplier
 	rootPart.AssemblyLinearVelocity = (throwDirection * speed) + Vector3.new(0, THROW_UPWARD_SPEED, 0)
 
 	pcall(function()

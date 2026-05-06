@@ -14,6 +14,7 @@ local controllerOrder = {
 	"GrabController",
 	"UIController",
 	"UpgradeShopController",
+	"LockedObjectController",
 	"FeedbackController",
 }
 

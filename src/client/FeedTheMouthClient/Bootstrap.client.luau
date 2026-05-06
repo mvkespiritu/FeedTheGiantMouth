@@ -10,10 +10,12 @@ local shared = feedRoot:WaitForChild("Shared")
 local remotes = feedRoot:WaitForChild("Remotes")
 
 local controllerOrder = {
+	"AudioController",
 	"InputController",
 	"GrabController",
 	"UIController",
 	"UpgradeShopController",
+	"LockedObjectController",
 	"FeedbackController",
 }
 

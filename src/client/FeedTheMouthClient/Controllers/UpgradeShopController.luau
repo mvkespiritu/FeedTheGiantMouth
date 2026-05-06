@@ -28,6 +28,7 @@ function UpgradeShopController:Start()
 
 	if self.UpgradeButton:IsA("TextButton") then
 		self.UpgradeButton.Activated:Connect(function()
+			self:PlayClick()
 			self:ToggleShop()
 		end)
 	end
@@ -38,6 +39,7 @@ function UpgradeShopController:Start()
 			self.ButtonsByUpgrade[upgradeId] = button
 
 			button.Activated:Connect(function()
+				self:PlayClick()
 				self:RequestUpgrade(upgradeId)
 			end)
 		end
@@ -55,8 +57,29 @@ function UpgradeShopController:ToggleShop()
 	self.ShopFrame.Visible = not self.ShopFrame.Visible
 end
 
+function UpgradeShopController:PlayClick()
+	local audioController = self.Context.controllers.AudioController
+	if audioController ~= nil and audioController.PlaySFX ~= nil then
+		audioController:PlaySFX("UiClick")
+	end
+end
+
 function UpgradeShopController:RequestUpgrade(upgradeId: string)
 	self.RequestUpgradeRemote:FireServer(upgradeId)
+end
+
+function UpgradeShopController:RenderButton(button: TextButton, displayName: string, priceText: string)
+	local nameLabel = button:FindFirstChild("NameLabel")
+	local priceLabel = button:FindFirstChild("PriceLabel")
+
+	if nameLabel ~= nil and nameLabel:IsA("TextLabel") and priceLabel ~= nil and priceLabel:IsA("TextLabel") then
+		button.Text = ""
+		nameLabel.Text = displayName
+		priceLabel.Text = priceText
+		return
+	end
+
+	button.Text = displayName .. string.char(10) .. priceText
 end
 
 function UpgradeShopController:Render(data)
@@ -73,10 +96,10 @@ function UpgradeShopController:Render(data)
 		local cost = self.UpgradeConfig.getCost(upgradeId, currentLevel)
 
 		if cost == nil then
-			button.Text = `{definition.displayName}\nLv {currentLevel}/{definition.maxLevel}\nMAX`
+			self:RenderButton(button, definition.displayName, "MAX")
 			button.AutoButtonColor = false
 		else
-			button.Text = `{definition.displayName}\nLv {currentLevel}/{definition.maxLevel}\nCost: {cost}`
+			self:RenderButton(button, definition.displayName, tostring(cost) .. " COINS")
 			button.AutoButtonColor = coins >= cost
 		end
 	end

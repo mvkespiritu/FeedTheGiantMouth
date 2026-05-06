@@ -94,6 +94,66 @@
           }
         },
 
+        "UpgradeStatsPanel": {
+          "$className": "Frame",
+
+          "TitleLabel": {
+            "$className": "TextLabel"
+          },
+
+          "StatsGrid": {
+            "$className": "Frame",
+
+            "StrengthStatCard": {
+              "$className": "Frame",
+
+              "ShortLabel": {
+                "$className": "TextLabel"
+              },
+
+              "LevelValue": {
+                "$className": "TextLabel"
+              }
+            },
+
+            "CarryCapacityStatCard": {
+              "$className": "Frame",
+
+              "ShortLabel": {
+                "$className": "TextLabel"
+              },
+
+              "LevelValue": {
+                "$className": "TextLabel"
+              }
+            },
+
+            "ThrowPowerStatCard": {
+              "$className": "Frame",
+
+              "ShortLabel": {
+                "$className": "TextLabel"
+              },
+
+              "LevelValue": {
+                "$className": "TextLabel"
+              }
+            },
+
+            "ValueMultiplierStatCard": {
+              "$className": "Frame",
+
+              "ShortLabel": {
+                "$className": "TextLabel"
+              },
+
+              "LevelValue": {
+                "$className": "TextLabel"
+              }
+            }
+          }
+        },
+
         "UpgradeShopFrame": {
           "$className": "Frame",
 

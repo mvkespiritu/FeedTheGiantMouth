@@ -1,16 +1,24 @@
 --!strict
 
 local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
 local Workspace = game:GetService("Workspace")
 
 local MouthService = {}
 MouthService.Name = "MouthService"
 
 local FEEDER_FALLBACK_RADIUS = 40
+local CHEW_IDLE_TIMEOUT = 4
+local CHEW_CLOSE_TIME = 0.12
+local CHEW_OPEN_TIME = 0.16
+local CHEW_PAUSE_TIME = 0.04
+local MOUTH_MODEL_NAME = "MouthModel"
 
 function MouthService:Init(context)
 	self.Context = context
 	self.Constants = require(context.shared.Constants)
+	self.LastEatTime = 0
+	self.IsChewing = false
 end
 
 function MouthService:Start()
@@ -51,6 +59,7 @@ function MouthService:TryEat(hit: BasePart)
 	end
 
 	self:MarkConsumed(feedable)
+	self:StartChewing()
 
 	local player = self:GetFeeder(feedable, hit.Position)
 	local reward = 0
@@ -73,6 +82,99 @@ function MouthService:TryEat(hit: BasePart)
 			feedable:Destroy()
 		end
 	end)
+end
+
+function MouthService:StartChewing()
+	self.LastEatTime = os.clock()
+	if self.IsChewing then
+		return
+	end
+
+	self.IsChewing = true
+	task.spawn(function()
+		self:RunChewLoop()
+	end)
+end
+
+function MouthService:RunChewLoop()
+	local mouthModel = self:GetMouthModel()
+	if mouthModel == nil then
+		warn("[MouthService] MouthModel not found")
+		self.IsChewing = false
+		return
+	end
+
+	local restCFrames = self:CaptureMouthCFrames(mouthModel)
+	while true do
+		while os.clock() - self.LastEatTime <= CHEW_IDLE_TIMEOUT do
+			self:TweenMouth(restCFrames, true, CHEW_CLOSE_TIME)
+			task.wait(CHEW_CLOSE_TIME + CHEW_PAUSE_TIME)
+			self:TweenMouth(restCFrames, false, CHEW_OPEN_TIME)
+			task.wait(CHEW_OPEN_TIME + CHEW_PAUSE_TIME)
+		end
+
+		self:TweenMouth(restCFrames, false, CHEW_OPEN_TIME)
+		task.wait(CHEW_OPEN_TIME)
+		if os.clock() - self.LastEatTime > CHEW_IDLE_TIMEOUT then
+			break
+		end
+	end
+
+	self.IsChewing = false
+end
+
+function MouthService:GetMouthModel(): Model?
+	local world = Workspace:FindFirstChild(self.Constants.WORLD_FOLDER_NAME)
+	local mouth = if world ~= nil then world:FindFirstChild("Mouth") else nil
+	local mouthModel = if mouth ~= nil then mouth:FindFirstChild(MOUTH_MODEL_NAME) else nil
+
+	if mouthModel ~= nil and mouthModel:IsA("Model") then
+		return mouthModel
+	end
+
+	return nil
+end
+
+function MouthService:CaptureMouthCFrames(mouthModel: Model): {[BasePart]: CFrame}
+	local restCFrames = {}
+	for _, descendant in ipairs(mouthModel:GetDescendants()) do
+		if descendant:IsA("BasePart") then
+			restCFrames[descendant] = descendant.CFrame
+		end
+	end
+
+	return restCFrames
+end
+
+function MouthService:GetChewOffset(partName: string): Vector3
+	if partName == "UpperLip" or partName:sub(1, 8) == "TopTooth" then
+		return Vector3.new(0, -7, 0)
+	elseif partName == "LowerLip" or partName:sub(1, 11) == "BottomTooth" then
+		return Vector3.new(0, 7, 0)
+	elseif partName == "LeftLip" then
+		return Vector3.new(4, 0, 0)
+	elseif partName == "RightLip" then
+		return Vector3.new(-4, 0, 0)
+	elseif partName == "Tongue" then
+		return Vector3.new(0, 2, -3)
+	end
+
+	return Vector3.zero
+end
+
+function MouthService:TweenMouth(restCFrames: {[BasePart]: CFrame}, closed: boolean, duration: number)
+	local tweenInfo = TweenInfo.new(duration, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut)
+	for part, restCFrame in pairs(restCFrames) do
+		if part.Parent == nil then
+			continue
+		end
+
+		local offset = if closed then self:GetChewOffset(part.Name) else Vector3.zero
+		local targetCFrame = restCFrame * CFrame.new(offset)
+		TweenService:Create(part, tweenInfo, {
+			CFrame = targetCFrame,
+		}):Play()
+	end
 end
 
 function MouthService:MarkConsumed(feedable: Instance)

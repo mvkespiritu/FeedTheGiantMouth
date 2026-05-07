@@ -45,19 +45,28 @@ function LockedObjectController:Start()
 
 	local feedablesFolder = self:GetFeedablesFolder()
 	if feedablesFolder ~= nil then
-		table.insert(self.Connections, feedablesFolder.DescendantAdded:Connect(function()
-			self:QueueRefresh()
-		end))
+		table.insert(
+			self.Connections,
+			feedablesFolder.DescendantAdded:Connect(function()
+				self:QueueRefresh()
+			end)
+		)
 
-		table.insert(self.Connections, feedablesFolder.DescendantRemoving:Connect(function()
-			self:QueueRefresh()
-		end))
+		table.insert(
+			self.Connections,
+			feedablesFolder.DescendantRemoving:Connect(function()
+				self:QueueRefresh()
+			end)
+		)
 	end
 
-	table.insert(self.Connections, self.LocalPlayer.CharacterAdded:Connect(function(character)
-		self:AttachCharacterListeners(character)
-		self:QueueRefresh()
-	end))
+	table.insert(
+		self.Connections,
+		self.LocalPlayer.CharacterAdded:Connect(function(character)
+			self:AttachCharacterListeners(character)
+			self:QueueRefresh()
+		end)
+	)
 
 	local character = self.LocalPlayer.Character
 	if character ~= nil then
@@ -73,17 +82,23 @@ function LockedObjectController:AttachCharacterListeners(character: Model)
 	end
 	self.CharacterConnections = {}
 
-	table.insert(self.CharacterConnections, character.DescendantAdded:Connect(function(descendant)
-		if descendant:IsA("WeldConstraint") and descendant.Name == HOLD_WELD_NAME then
-			self:QueueRefresh()
-		end
-	end))
+	table.insert(
+		self.CharacterConnections,
+		character.DescendantAdded:Connect(function(descendant)
+			if descendant:IsA("WeldConstraint") and descendant.Name == HOLD_WELD_NAME then
+				self:QueueRefresh()
+			end
+		end)
+	)
 
-	table.insert(self.CharacterConnections, character.DescendantRemoving:Connect(function(descendant)
-		if descendant:IsA("WeldConstraint") and descendant.Name == HOLD_WELD_NAME then
-			self:QueueRefresh()
-		end
-	end))
+	table.insert(
+		self.CharacterConnections,
+		character.DescendantRemoving:Connect(function(descendant)
+			if descendant:IsA("WeldConstraint") and descendant.Name == HOLD_WELD_NAME then
+				self:QueueRefresh()
+			end
+		end)
+	)
 end
 
 function LockedObjectController:GetFeedablesFolder(): Folder?
@@ -127,7 +142,10 @@ function LockedObjectController:RefreshLockedVisuals()
 
 	for _, child in ipairs(feedablesFolder:GetDescendants()) do
 		if child:IsA("Model") or child:IsA("BasePart") then
-			if child:GetAttribute(self.Constants.ATTRIBUTES.Feedable) == true and self:IsRootFeedable(child, feedablesFolder) then
+			if
+				child:GetAttribute(self.Constants.ATTRIBUTES.Feedable) == true
+				and self:IsRootFeedable(child, feedablesFolder)
+			then
 				self:RefreshFeedable(child)
 
 				if characterRootPart ~= nil and self:IsAvailableFeedable(child) then
@@ -165,9 +183,7 @@ function LockedObjectController:RefreshFeedable(feedable: Instance)
 	local attributes = self.Constants.ATTRIBUTES
 	local consumed = feedable:GetAttribute(attributes.Consumed) == true
 	local requiredStrength = feedable:GetAttribute(attributes.RequiredStrength)
-	local isLocked = not consumed
-		and typeof(requiredStrength) == "number"
-		and requiredStrength > self.CurrentStrength
+	local isLocked = not consumed and typeof(requiredStrength) == "number" and requiredStrength > self.CurrentStrength
 
 	if isLocked then
 		self:EnsureLockedVisuals(feedable, requiredStrength)
@@ -464,8 +480,8 @@ function LockedObjectController:RefreshNearestMarker(
 		beam.Attachment1 = endAttachment
 		beam.FaceCamera = true
 		beam.LightEmission = 1
-		beam.Width0 = 0.17
-		beam.Width1 = 0.17
+		beam.Width0 = 0.47
+		beam.Width1 = 0.47
 		beam.Segments = 20
 		beam.Color = ColorSequence.new(markerColor)
 		beam.Transparency = NumberSequence.new({

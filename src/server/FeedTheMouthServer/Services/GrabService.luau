@@ -173,10 +173,11 @@ function GrabService:RepositionHeldObjects(player, humanoidRootPart: BasePart?)
 		end
 
 		local offset = self:GetHoldOffset(index)
+		local carryCFrame = humanoidRootPart.CFrame * offset * CFrame.new(0, self:GetCarryBottomOffset(held.feedable), 0)
 		if held.feedable:IsA("Model") then
-			held.feedable:PivotTo(humanoidRootPart.CFrame * offset)
+			held.feedable:PivotTo(carryCFrame)
 		else
-			rootPart.CFrame = humanoidRootPart.CFrame * offset
+			rootPart.CFrame = carryCFrame
 		end
 
 		local weld = Instance.new("WeldConstraint")
@@ -207,6 +208,20 @@ function GrabService:GetHoldOffset(index: number): CFrame
 	local z = -HOLD_DISTANCE - ((row + 1) * HOLD_DEPTH_SPACING)
 
 	return CFrame.new(x, y, z)
+end
+
+function GrabService:GetCarryBottomOffset(feedable: Instance): number
+	if feedable:IsA("BasePart") then
+		return feedable.Size.Y * 0.5
+	end
+
+	if feedable:IsA("Model") then
+		local boundsCFrame, boundsSize = feedable:GetBoundingBox()
+		local bottomY = boundsCFrame.Position.Y - (boundsSize.Y * 0.5)
+		return math.max(0, feedable:GetPivot().Position.Y - bottomY)
+	end
+
+	return 0
 end
 
 function GrabService:RestoreFeedablePhysics(feedable: Instance)

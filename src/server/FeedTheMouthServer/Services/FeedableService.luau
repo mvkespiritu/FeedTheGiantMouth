@@ -1,6 +1,7 @@
 --!strict
 
 local Workspace = game:GetService("Workspace")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local FeedableService = {}
 FeedableService.Name = "FeedableService"
@@ -12,16 +13,53 @@ function FeedableService:Init(context)
 end
 
 function FeedableService:Start()
+	self:EnsureTierFolders()
 	self:TagInitialFeedables()
 end
 
 function FeedableService:GetFeedablesFolder(): Folder?
 	local world = Workspace:FindFirstChild(self.Constants.WORLD_FOLDER_NAME)
-	if world == nil then
+	if world == nil or not world:IsA("Folder") then
 		return nil
 	end
 
-	return world:FindFirstChild("FeedableObjects") :: Folder?
+	local feedablesFolder = world:FindFirstChild(self.Constants.FEEDABLES_FOLDER_NAME)
+	if feedablesFolder == nil then
+		feedablesFolder = Instance.new("Folder")
+		feedablesFolder.Name = self.Constants.FEEDABLES_FOLDER_NAME
+		feedablesFolder.Parent = world
+	end
+
+	if feedablesFolder:IsA("Folder") then
+		return feedablesFolder
+	end
+
+	return nil
+end
+
+function FeedableService:GetTemplateFeedablesFolder(): Folder?
+	local root = ReplicatedStorage:FindFirstChild(self.Constants.ROOT_FOLDER_NAME)
+	if root == nil then
+		return nil
+	end
+
+	return root:FindFirstChild(self.Constants.FEEDABLES_FOLDER_NAME) :: Folder?
+end
+
+function FeedableService:EnsureTierFolders()
+	local feedablesFolder = self:GetFeedablesFolder()
+	if feedablesFolder == nil then
+		return
+	end
+
+	for _, tierConfig in pairs(self.ObjectTiers) do
+		local existing = feedablesFolder:FindFirstChild(tierConfig.folderName)
+		if existing == nil then
+			local tierFolder = Instance.new("Folder")
+			tierFolder.Name = tierConfig.folderName
+			tierFolder.Parent = feedablesFolder
+		end
+	end
 end
 
 function FeedableService:TagInitialFeedables()

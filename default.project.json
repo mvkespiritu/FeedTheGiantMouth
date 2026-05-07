@@ -13,6 +13,31 @@
           "$path": "src/shared/FeedTheMouth/Shared"
         },
 
+        "FeedableObjects": {
+          "$className": "Folder",
+          "$ignoreUnknownInstances": true,
+
+          "Small": {
+            "$className": "Folder",
+            "$ignoreUnknownInstances": true
+          },
+
+          "Medium": {
+            "$className": "Folder",
+            "$ignoreUnknownInstances": true
+          },
+
+          "Large": {
+            "$className": "Folder",
+            "$ignoreUnknownInstances": true
+          },
+
+          "Absurd": {
+            "$className": "Folder",
+            "$ignoreUnknownInstances": true
+          }
+        },
+
         "Remotes": {
           "$className": "Folder",
 
@@ -216,21 +241,26 @@
 
         "FeedableObjects": {
           "$className": "Folder",
+          "$ignoreUnknownInstances": true,
 
           "Small": {
-            "$className": "Folder"
+            "$className": "Folder",
+            "$ignoreUnknownInstances": true
           },
 
           "Medium": {
-            "$className": "Folder"
+            "$className": "Folder",
+            "$ignoreUnknownInstances": true
           },
 
           "Large": {
-            "$className": "Folder"
+            "$className": "Folder",
+            "$ignoreUnknownInstances": true
           },
 
           "Absurd": {
-            "$className": "Folder"
+            "$className": "Folder",
+            "$ignoreUnknownInstances": true
           }
         }
       }

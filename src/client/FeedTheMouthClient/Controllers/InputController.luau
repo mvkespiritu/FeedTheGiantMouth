@@ -137,6 +137,7 @@ function InputController:HandlePrimaryAction(instance: Instance?)
 	end
 
 	self.Context.controllers.GrabController:RequestGrab(feedable)
+	self:QueueMarkerRefresh()
 end
 
 function InputController:RequestThrow()
@@ -146,6 +147,14 @@ function InputController:RequestThrow()
 		then humanoidRootPart.CFrame.LookVector
 		else Vector3.new(0, 0, -1)
 	self.Context.controllers.GrabController:RequestThrow(direction)
+	self:QueueMarkerRefresh()
+end
+
+function InputController:QueueMarkerRefresh()
+	local lockedObjectController = self.Context.controllers.LockedObjectController
+	if lockedObjectController ~= nil then
+		lockedObjectController:QueueRefresh()
+	end
 end
 
 function InputController:FindFeedable(instance: Instance): Instance?

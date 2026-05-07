@@ -13,6 +13,7 @@ local HOLD_DEPTH_SPACING = 1.25
 local BASE_THROW_SPEED = 150 --93.75
 local ABSURD_GRAB_DISTANCE_MIN_BONUS = 8
 local ABSURD_GRAB_DISTANCE_MAX_BONUS = 40
+local THROW_CHARACTER_COLLISION_GRACE_SECONDS = 0.45
 local THROW_POWER_PER_LEVEL = 12.5
 local THROW_UPWARD_SPEED = 50
 local DEFAULT_WALK_SPEED = 16
@@ -149,6 +150,7 @@ function GrabService:AddHeldObject(player, feedable: Instance, rootPart: BasePar
 	table.insert(heldList, {
 		feedable = feedable,
 		rootPart = rootPart,
+		noCollisionConstraints = self:CreateCharacterNoCollisionConstraints(player, feedable),
 	})
 
 	self:RepositionHeldObjects(player, humanoidRootPart)
@@ -164,6 +166,7 @@ function GrabService:RepositionHeldObjects(player, humanoidRootPart: BasePart?)
 	for index = #heldList, 1, -1 do
 		local held = heldList[index]
 		if not self:IsHeldEntryValid(held) then
+			self:DetachHeldEntry(held)
 			table.remove(heldList, index)
 		end
 	end
@@ -253,6 +256,57 @@ function GrabService:GetCarryBottomOffset(feedable: Instance): number
 	end
 
 	return 0
+end
+
+function GrabService:GetCharacterBaseParts(player): { BasePart }
+	local character = player.Character
+	if character == nil then
+		return {}
+	end
+
+	local parts = {}
+	for _, descendant in ipairs(character:GetDescendants()) do
+		if descendant:IsA("BasePart") then
+			table.insert(parts, descendant)
+		end
+	end
+
+	return parts
+end
+
+function GrabService:CreateCharacterNoCollisionConstraints(player, feedable: Instance): { NoCollisionConstraint }
+	local feedableService = self.Context.services.FeedableService
+	local feedableParts = feedableService:GetBaseParts(feedable)
+	local characterParts = self:GetCharacterBaseParts(player)
+	local constraints = {}
+
+	if #feedableParts == 0 or #characterParts == 0 then
+		return constraints
+	end
+
+	for _, feedablePart in ipairs(feedableParts) do
+		for _, characterPart in ipairs(characterParts) do
+			local noCollision = Instance.new("NoCollisionConstraint")
+			noCollision.Part0 = feedablePart
+			noCollision.Part1 = characterPart
+			noCollision.Parent = feedablePart
+			table.insert(constraints, noCollision)
+		end
+	end
+
+	return constraints
+end
+
+function GrabService:ClearNoCollisionConstraints(constraints: { NoCollisionConstraint }?)
+	if constraints == nil then
+		return
+	end
+
+	for _, constraint in ipairs(constraints) do
+		if constraint.Parent ~= nil then
+			constraint:Destroy()
+		end
+	end
 end
 
 function GrabService:RestoreFeedablePhysics(feedable: Instance)
@@ -378,7 +432,19 @@ function GrabService:GetHeldEntry(player, feedable: Instance): any?
 	return nil
 end
 
-function GrabService:RemoveHeldEntry(player, targetFeedable: Instance?): any?
+function GrabService:IsFeedableHeld(feedable: Instance): boolean
+	for _player, heldList in pairs(self.HeldByPlayer) do
+		for _, held in ipairs(heldList) do
+			if held.feedable == feedable then
+				return true
+			end
+		end
+	end
+
+	return false
+end
+
+function GrabService:RemoveHeldEntry(player, targetFeedable: Instance?, restoreCollisionNow: boolean?): any?
 	local heldList = self:GetHeldList(player)
 	if #heldList == 0 then
 		return nil
@@ -399,20 +465,27 @@ function GrabService:RemoveHeldEntry(player, targetFeedable: Instance?): any?
 		return nil
 	end
 
-	self:DetachHeldEntry(held)
+	self:DetachHeldEntry(held, restoreCollisionNow)
 	self:RepositionHeldObjects(player)
 	self:UpdatePlayerHandling(player)
 	return held
 end
 
-function GrabService:DetachHeldEntry(held)
+function GrabService:DetachHeldEntry(held, restoreCollisionNow: boolean?)
+	restoreCollisionNow = if restoreCollisionNow == nil then true else restoreCollisionNow
+
 	local holdWeld = held.holdWeld
 	if typeof(holdWeld) == "Instance" and holdWeld.Parent ~= nil then
 		holdWeld:Destroy()
 	end
 
-	if typeof(held.feedable) == "Instance" and held.feedable.Parent ~= nil then
+	if restoreCollisionNow and typeof(held.feedable) == "Instance" and held.feedable.Parent ~= nil then
 		self:RestoreFeedablePhysics(held.feedable)
+	end
+
+	if restoreCollisionNow then
+		self:ClearNoCollisionConstraints(held.noCollisionConstraints)
+		held.noCollisionConstraints = nil
 	end
 end
 
@@ -474,12 +547,20 @@ function GrabService:ApplyThrowVelocity(player, held, direction)
 end
 
 function GrabService:RequestThrow(player, direction, targetFeedable: Instance?)
-	local held = self:RemoveHeldEntry(player, targetFeedable)
+	local held = self:RemoveHeldEntry(player, targetFeedable, false)
 	if held == nil then
 		return
 	end
 
 	self:ApplyThrowVelocity(player, held, direction)
+	task.delay(THROW_CHARACTER_COLLISION_GRACE_SECONDS, function()
+		if typeof(held.feedable) == "Instance" and held.feedable.Parent ~= nil and not self:IsFeedableHeld(held.feedable) then
+			self:RestoreFeedablePhysics(held.feedable)
+		end
+
+		self:ClearNoCollisionConstraints(held.noCollisionConstraints)
+		held.noCollisionConstraints = nil
+	end)
 	self.Context.services.FeedbackService:Play(player, "ThrowObject", {})
 end
 

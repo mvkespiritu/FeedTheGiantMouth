@@ -10,7 +10,9 @@ local MAX_GRAB_DISTANCE = 24
 local HOLD_HORIZONTAL_SPACING = 3.25
 local HOLD_VERTICAL_SPACING = 2.25
 local HOLD_DEPTH_SPACING = 1.25
-local BASE_THROW_SPEED = 93.75
+local BASE_THROW_SPEED = 150 --93.75
+local ABSURD_GRAB_DISTANCE_MIN_BONUS = 8
+local ABSURD_GRAB_DISTANCE_MAX_BONUS = 40
 local THROW_POWER_PER_LEVEL = 12.5
 local THROW_UPWARD_SPEED = 50
 local DEFAULT_WALK_SPEED = 16
@@ -102,7 +104,8 @@ function GrabService:RequestGrab(player, feedable)
 		return
 	end
 
-	if (rootPart.Position - humanoidRootPart.Position).Magnitude > MAX_GRAB_DISTANCE then
+	local maxGrabDistance = self:GetMaxGrabDistance(feedable)
+	if (rootPart.Position - humanoidRootPart.Position).Magnitude > maxGrabDistance then
 		return
 	end
 
@@ -173,7 +176,9 @@ function GrabService:RepositionHeldObjects(player, humanoidRootPart: BasePart?)
 		end
 
 		local offset = self:GetHoldOffset(index)
-		local carryCFrame = humanoidRootPart.CFrame * offset * CFrame.new(0, self:GetCarryBottomOffset(held.feedable), 0)
+		local carryCFrame = humanoidRootPart.CFrame
+			* offset
+			* CFrame.new(0, self:GetCarryBottomOffset(held.feedable), 0)
 		if held.feedable:IsA("Model") then
 			held.feedable:PivotTo(carryCFrame)
 		else
@@ -208,6 +213,32 @@ function GrabService:GetHoldOffset(index: number): CFrame
 	local z = -HOLD_DISTANCE - ((row + 1) * HOLD_DEPTH_SPACING)
 
 	return CFrame.new(x, y, z)
+end
+
+function GrabService:GetMaxGrabDistance(feedable: Instance): number
+	local maxGrabDistance = MAX_GRAB_DISTANCE
+	local tier = feedable:GetAttribute(self.Constants.ATTRIBUTES.Tier)
+	if tier ~= self.Constants.TIERS.Absurd then
+		return maxGrabDistance
+	end
+
+	local boundsSize = self:GetFeedableBoundsSize(feedable)
+	local boundsRadius = math.max(boundsSize.X, boundsSize.Y, boundsSize.Z) * 0.5
+	local absurdBonus = math.clamp(boundsRadius, ABSURD_GRAB_DISTANCE_MIN_BONUS, ABSURD_GRAB_DISTANCE_MAX_BONUS)
+	return maxGrabDistance + absurdBonus
+end
+
+function GrabService:GetFeedableBoundsSize(feedable: Instance): Vector3
+	if feedable:IsA("BasePart") then
+		return feedable.Size
+	end
+
+	if feedable:IsA("Model") then
+		local _boundsCFrame, boundsSize = feedable:GetBoundingBox()
+		return boundsSize
+	end
+
+	return Vector3.new(4, 4, 4)
 end
 
 function GrabService:GetCarryBottomOffset(feedable: Instance): number

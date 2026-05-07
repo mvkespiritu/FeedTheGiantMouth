@@ -1,6 +1,7 @@
 --!strict
 
 local Workspace = game:GetService("Workspace")
+local Players = game:GetService("Players")
 
 local LockedObjectController = {}
 LockedObjectController.Name = "LockedObjectController"
@@ -11,14 +12,23 @@ local LABEL_NAME = "StrengthLabel"
 local CORNER_NAME = "RoundedCorners"
 local PADDING_NAME = "TextPadding"
 local REFRESH_DELAY = 0.2
+local MARKER_FOLDER_NAME = "NearestAvailableMarker"
+local MARKER_START_ATTACHMENT_NAME = "NearestMarkerStart"
+local MARKER_END_ATTACHMENT_NAME = "NearestMarkerEnd"
+local MARKER_BEAM_NAME = "NearestMarkerBeam"
 
 function LockedObjectController:Init(context)
 	self.Context = context
 	self.Constants = require(context.shared.Constants)
 	self.PlayerDataChanged = context.remotes:WaitForChild("PlayerDataChanged")
+	self.LocalPlayer = Players.LocalPlayer
 	self.CurrentStrength = 1
 	self.RefreshQueued = false
 	self.Connections = {}
+	self.MarkerTarget = nil
+	self.MarkerStartAttachment = nil
+	self.MarkerEndAttachment = nil
+	self.MarkerBeam = nil
 end
 
 function LockedObjectController:Start()
@@ -67,16 +77,34 @@ end
 function LockedObjectController:RefreshLockedVisuals()
 	local feedablesFolder = self:GetFeedablesFolder()
 	if feedablesFolder == nil then
+		self:ClearNearestMarker()
 		return
 	end
+
+	local characterRootPart = self:GetCharacterRootPart()
+	local nearestAvailableFeedable = nil
+	local nearestAvailableDistance = math.huge
 
 	for _, child in ipairs(feedablesFolder:GetDescendants()) do
 		if child:IsA("Model") or child:IsA("BasePart") then
 			if child:GetAttribute(self.Constants.ATTRIBUTES.Feedable) == true and self:IsRootFeedable(child, feedablesFolder) then
 				self:RefreshFeedable(child)
+
+				if characterRootPart ~= nil and self:IsAvailableFeedable(child) then
+					local targetPosition = self:GetFeedablePosition(child)
+					if targetPosition ~= nil then
+						local distance = (characterRootPart.Position - targetPosition).Magnitude
+						if distance < nearestAvailableDistance then
+							nearestAvailableDistance = distance
+							nearestAvailableFeedable = child
+						end
+					end
+				end
 			end
 		end
 	end
+
+	self:RefreshNearestMarker(characterRootPart, nearestAvailableFeedable)
 end
 
 function LockedObjectController:IsRootFeedable(feedable: Instance, feedablesFolder: Folder): boolean
@@ -224,6 +252,167 @@ function LockedObjectController:GetBillboardHeight(feedable: Instance): number
 	end
 
 	return 4
+end
+
+function LockedObjectController:GetCharacterRootPart(): BasePart?
+	local character = self.LocalPlayer.Character
+	if character == nil then
+		return nil
+	end
+
+	local humanoidRootPart = character:FindFirstChild("HumanoidRootPart")
+	if humanoidRootPart ~= nil and humanoidRootPart:IsA("BasePart") then
+		return humanoidRootPart
+	end
+
+	return nil
+end
+
+function LockedObjectController:IsAvailableFeedable(feedable: Instance): boolean
+	local attributes = self.Constants.ATTRIBUTES
+	if feedable:GetAttribute(attributes.Consumed) == true then
+		return false
+	end
+
+	local requiredStrength = feedable:GetAttribute(attributes.RequiredStrength)
+	if typeof(requiredStrength) ~= "number" then
+		requiredStrength = 1
+	end
+
+	return requiredStrength <= self.CurrentStrength
+end
+
+function LockedObjectController:GetFeedablePosition(feedable: Instance): Vector3?
+	local adornee = self:GetAdornee(feedable)
+	if adornee ~= nil then
+		return adornee.Position
+	end
+
+	return nil
+end
+
+function LockedObjectController:RefreshNearestMarker(characterRootPart: BasePart?, targetFeedable: Instance?)
+	if characterRootPart == nil or targetFeedable == nil then
+		self:ClearNearestMarker()
+		return
+	end
+
+	local targetPart = self:GetAdornee(targetFeedable)
+	if targetPart == nil then
+		self:ClearNearestMarker()
+		return
+	end
+
+	local character = characterRootPart.Parent
+	if character == nil then
+		self:ClearNearestMarker()
+		return
+	end
+
+	local markerFolder = character:FindFirstChild(MARKER_FOLDER_NAME)
+	if markerFolder == nil then
+		markerFolder = Instance.new("Folder")
+		markerFolder.Name = MARKER_FOLDER_NAME
+		markerFolder.Parent = character
+	end
+
+	local startAttachment = characterRootPart:FindFirstChild(MARKER_START_ATTACHMENT_NAME)
+	if startAttachment == nil then
+		startAttachment = Instance.new("Attachment")
+		startAttachment.Name = MARKER_START_ATTACHMENT_NAME
+		startAttachment.Parent = characterRootPart
+	end
+
+	if self.MarkerEndAttachment ~= nil and self.MarkerEndAttachment.Parent ~= targetPart then
+		self.MarkerEndAttachment:Destroy()
+		self.MarkerEndAttachment = nil
+	end
+
+	local endAttachment = targetPart:FindFirstChild(MARKER_END_ATTACHMENT_NAME)
+	if endAttachment == nil then
+		endAttachment = Instance.new("Attachment")
+		endAttachment.Name = MARKER_END_ATTACHMENT_NAME
+		endAttachment.Parent = targetPart
+	end
+
+	if startAttachment:IsA("Attachment") then
+		startAttachment.Parent = characterRootPart
+		startAttachment.Position = Vector3.new(0, 0.5, 0)
+	end
+
+	if endAttachment:IsA("Attachment") then
+		endAttachment.Parent = targetPart
+		endAttachment.Position = Vector3.new(0, 0, 0)
+	end
+
+	local beam = markerFolder:FindFirstChild(MARKER_BEAM_NAME)
+	if beam == nil then
+		beam = Instance.new("Beam")
+		beam.Name = MARKER_BEAM_NAME
+		beam.Parent = markerFolder
+	end
+
+	if beam:IsA("Beam") and startAttachment:IsA("Attachment") and endAttachment:IsA("Attachment") then
+		beam.Attachment0 = startAttachment
+		beam.Attachment1 = endAttachment
+		beam.FaceCamera = true
+		beam.LightEmission = 1
+		beam.Width0 = 0.17
+		beam.Width1 = 0.17
+		beam.Segments = 20
+		beam.Color = ColorSequence.new(Color3.fromRGB(94, 210, 255))
+		beam.Transparency = NumberSequence.new({
+			NumberSequenceKeypoint.new(0, 0),
+			NumberSequenceKeypoint.new(0.08, 0),
+			NumberSequenceKeypoint.new(0.12, 1),
+			NumberSequenceKeypoint.new(0.22, 1),
+			NumberSequenceKeypoint.new(0.26, 0),
+			NumberSequenceKeypoint.new(0.34, 0),
+			NumberSequenceKeypoint.new(0.38, 1),
+			NumberSequenceKeypoint.new(0.48, 1),
+			NumberSequenceKeypoint.new(0.52, 0),
+			NumberSequenceKeypoint.new(0.6, 0),
+			NumberSequenceKeypoint.new(0.64, 1),
+			NumberSequenceKeypoint.new(0.74, 1),
+			NumberSequenceKeypoint.new(0.78, 0),
+			NumberSequenceKeypoint.new(0.86, 0),
+			NumberSequenceKeypoint.new(0.9, 1),
+			NumberSequenceKeypoint.new(1, 1),
+		})
+		beam.Enabled = true
+	end
+
+	self.MarkerTarget = targetFeedable
+	self.MarkerStartAttachment = if startAttachment:IsA("Attachment") then startAttachment else nil
+	self.MarkerEndAttachment = if endAttachment:IsA("Attachment") then endAttachment else nil
+	self.MarkerBeam = if beam:IsA("Beam") then beam else nil
+end
+
+function LockedObjectController:ClearNearestMarker()
+	local character = self.LocalPlayer.Character
+	if self.MarkerBeam ~= nil then
+		self.MarkerBeam:Destroy()
+		self.MarkerBeam = nil
+	end
+
+	if self.MarkerStartAttachment ~= nil then
+		self.MarkerStartAttachment:Destroy()
+		self.MarkerStartAttachment = nil
+	end
+
+	if self.MarkerEndAttachment ~= nil then
+		self.MarkerEndAttachment:Destroy()
+		self.MarkerEndAttachment = nil
+	end
+
+	if character ~= nil then
+		local markerFolder = character:FindFirstChild(MARKER_FOLDER_NAME)
+		if markerFolder ~= nil then
+			markerFolder:Destroy()
+		end
+	end
+
+	self.MarkerTarget = nil
 end
 
 return LockedObjectController

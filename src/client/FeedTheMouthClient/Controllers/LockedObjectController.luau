@@ -107,7 +107,7 @@ function LockedObjectController:GetFeedablesFolder(): Folder?
 		return nil
 	end
 
-	return world:FindFirstChild("FeedableObjects") :: Folder?
+	return world:FindFirstChild(self.Constants.FEEDABLES_FOLDER_NAME) :: Folder?
 end
 
 function LockedObjectController:QueueRefresh()

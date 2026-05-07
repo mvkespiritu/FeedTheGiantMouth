@@ -4,6 +4,7 @@ local Constants = {
 	ROOT_FOLDER_NAME = "FeedTheMouth",
 	SHARED_FOLDER_NAME = "Shared",
 	REMOTES_FOLDER_NAME = "Remotes",
+	FEEDABLES_FOLDER_NAME = "FeedableObjects",
 	WORLD_FOLDER_NAME = "FeedTheMouthWorld",
 	MAIN_HUD_NAME = "MainHUD",
 

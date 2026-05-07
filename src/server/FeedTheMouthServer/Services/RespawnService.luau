@@ -44,7 +44,26 @@ function RespawnService:GetFeedablesFolder(): Folder?
 		return nil
 	end
 
-	return world:FindFirstChild("FeedableObjects") :: Folder?
+	return world:FindFirstChild(self.Constants.FEEDABLES_FOLDER_NAME) :: Folder?
+end
+
+function RespawnService:GetTemplateTierFolder(tierName: string): Folder?
+	local tierConfig = self.ObjectTiers[tierName]
+	if tierConfig == nil then
+		return nil
+	end
+
+	local feedableService = self.Context.services.FeedableService
+	if feedableService == nil then
+		return nil
+	end
+
+	local templateFeedablesFolder = feedableService:GetTemplateFeedablesFolder()
+	if templateFeedablesFolder == nil then
+		return nil
+	end
+
+	return templateFeedablesFolder:FindFirstChild(tierConfig.folderName) :: Folder?
 end
 
 function RespawnService:GetTierFolder(tierName: string): Folder?
@@ -88,9 +107,9 @@ function RespawnService:BuildTemplateCache()
 	templateRoot.Parent = ServerStorage
 
 	for tierName, tierConfig in pairs(self.ObjectTiers) do
-		local tierFolder = self:GetTierFolder(tierName)
-		if tierFolder == nil then
-			warn(`[RespawnService] FeedableObjects.{tierConfig.folderName} not found`)
+		local templateTierFolder = self:GetTemplateTierFolder(tierName)
+		if templateTierFolder == nil then
+			warn(`[RespawnService] ReplicatedStorage feedable templates missing for tier {tierConfig.folderName}`)
 			continue
 		end
 
@@ -99,14 +118,12 @@ function RespawnService:BuildTemplateCache()
 		templateFolder.Parent = templateRoot
 		self.TemplateFoldersByTier[tierName] = templateFolder
 
-		for _, feedable in ipairs(tierFolder:GetChildren()) do
+		for _, feedable in ipairs(templateTierFolder:GetChildren()) do
 			if feedable:IsA("BasePart") or feedable:IsA("Model") then
 				local template = feedable:Clone()
 				template.Parent = templateFolder
 			end
 		end
-
-		tierFolder:ClearAllChildren()
 	end
 end
 

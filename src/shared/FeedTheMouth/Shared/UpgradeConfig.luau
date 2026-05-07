@@ -7,7 +7,7 @@ UpgradeConfig.Definitions = table.freeze({
 		displayName = "Strength",
 		defaultLevel = 1,
 		maxLevel = 4,
-		baseCost = 10, --300,
+		baseCost = 300,
 		costMultiplier = 1.75,
 	},
 

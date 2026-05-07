@@ -10,7 +10,7 @@ local MAX_GRAB_DISTANCE = 24
 local HOLD_HORIZONTAL_SPACING = 3.25
 local HOLD_VERTICAL_SPACING = 2.25
 local HOLD_DEPTH_SPACING = 1.25
-local BASE_THROW_SPEED = 150 --93.75
+local BASE_THROW_SPEED = 55 --93.75
 local ABSURD_GRAB_DISTANCE_MIN_BONUS = 8
 local ABSURD_GRAB_DISTANCE_MAX_BONUS = 40
 local THROW_CHARACTER_COLLISION_GRACE_SECONDS = 0.45
@@ -554,7 +554,11 @@ function GrabService:RequestThrow(player, direction, targetFeedable: Instance?)
 
 	self:ApplyThrowVelocity(player, held, direction)
 	task.delay(THROW_CHARACTER_COLLISION_GRACE_SECONDS, function()
-		if typeof(held.feedable) == "Instance" and held.feedable.Parent ~= nil and not self:IsFeedableHeld(held.feedable) then
+		if
+			typeof(held.feedable) == "Instance"
+			and held.feedable.Parent ~= nil
+			and not self:IsFeedableHeld(held.feedable)
+		then
 			self:RestoreFeedablePhysics(held.feedable)
 		end
 

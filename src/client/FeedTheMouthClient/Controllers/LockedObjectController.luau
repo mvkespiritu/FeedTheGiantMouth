@@ -116,9 +116,9 @@ function LockedObjectController:RefreshLockedVisuals()
 
 	local characterRootPart = self:GetCharacterRootPart()
 	local mouthTargetPart = self:GetMouthTargetPart()
-	local isHoldingObject = self:IsHoldingObject()
-	if isHoldingObject and characterRootPart ~= nil and mouthTargetPart ~= nil then
-		self:RefreshNearestMarker(characterRootPart, mouthTargetPart, MARKER_COLOR_HOLDING)
+	local heldRootPart = self:GetHeldObjectRootPart()
+	if heldRootPart ~= nil and mouthTargetPart ~= nil then
+		self:RefreshNearestMarker(heldRootPart, mouthTargetPart, MARKER_COLOR_HOLDING)
 		return
 	end
 
@@ -368,10 +368,10 @@ function LockedObjectController:GetMouthTargetPart(): BasePart?
 	return nil
 end
 
-function LockedObjectController:IsHoldingObject(): boolean
+function LockedObjectController:GetHeldObjectRootPart(): BasePart?
 	local humanoidRootPart = self:GetCharacterRootPart()
 	if humanoidRootPart == nil then
-		return false
+		return nil
 	end
 
 	local feedablesFolder = self:GetFeedablesFolder()
@@ -380,25 +380,18 @@ function LockedObjectController:IsHoldingObject(): boolean
 			if descendant:IsA("WeldConstraint") and descendant.Name == HOLD_WELD_NAME then
 				local part0 = descendant.Part0
 				local part1 = descendant.Part1
-				if part0 == humanoidRootPart or part1 == humanoidRootPart then
-					return true
+				if part0 == humanoidRootPart and part1 ~= nil and part1:IsA("BasePart") then
+					return part1
+				end
+
+				if part1 == humanoidRootPart and part0 ~= nil and part0:IsA("BasePart") then
+					return part0
 				end
 			end
 		end
 	end
 
-	local character = self.LocalPlayer.Character
-	if character == nil then
-		return false
-	end
-
-	for _, descendant in ipairs(character:GetDescendants()) do
-		if descendant:IsA("WeldConstraint") and descendant.Name == HOLD_WELD_NAME then
-			return true
-		end
-	end
-
-	return false
+	return nil
 end
 
 function LockedObjectController:RefreshNearestMarker(

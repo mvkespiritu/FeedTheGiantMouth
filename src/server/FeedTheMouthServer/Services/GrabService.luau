@@ -65,6 +65,10 @@ function GrabService:Start()
 end
 
 function GrabService:RequestGrab(player, feedable)
+	if self:IsPlayerCharacterHeld(player) then
+		return
+	end
+
 	if typeof(feedable) ~= "Instance" then
 		return
 	end
@@ -229,6 +233,13 @@ function GrabService:AddHeldObject(
 	humanoidRootPart: BasePart,
 	isPlayerCharacter: boolean
 )
+	if isPlayerCharacter and feedable:IsA("Model") then
+		local heldPlayer = Players:GetPlayerFromCharacter(feedable)
+		if heldPlayer ~= nil then
+			self:ClearHeld(heldPlayer)
+		end
+	end
+
 	local heldCharacterControlState = self:DisableHeldCharacterControl(feedable, isPlayerCharacter)
 	local heldList = self:GetHeldList(player)
 	table.insert(heldList, {
@@ -750,6 +761,10 @@ function GrabService:ApplyThrowVelocity(player, held, direction)
 end
 
 function GrabService:RequestThrow(player, direction, targetFeedable: Instance?)
+	if self:IsPlayerCharacterHeld(player) then
+		return
+	end
+
 	local held = self:RemoveHeldEntry(player, targetFeedable, false)
 	if held == nil then
 		return
@@ -769,6 +784,15 @@ function GrabService:RequestThrow(player, direction, targetFeedable: Instance?)
 		held.noCollisionConstraints = nil
 	end)
 	self.Context.services.FeedbackService:Play(player, "ThrowObject", {})
+end
+
+function GrabService:IsPlayerCharacterHeld(player): boolean
+	local character = player.Character
+	if character == nil then
+		return false
+	end
+
+	return self:IsFeedableHeld(character)
 end
 
 return GrabService

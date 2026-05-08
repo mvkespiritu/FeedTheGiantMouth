@@ -39,6 +39,7 @@ local STRUGGLE_FILL_PER_TAP = 0.08 --0.15
 local STRUGGLE_DECAY_PER_SECOND = 0.125
 local STRUGGLE_TAP_COOLDOWN = 0.06
 local STRUGGLE_ESCAPE_THRESHOLD = 1
+local PLAYER_DROP_GRAB_COOLDOWN = 3
 
 function GrabService:Init(context)
 	self.Context = context
@@ -51,6 +52,7 @@ function GrabService:Init(context)
 	self.BaseWalkSpeedByPlayer = {}
 	self.HeldCharacterStateByPlayer = {}
 	self.LastStruggleRequestByPlayer = {}
+	self.PlayerGrabCooldownUntil = {}
 	self.StruggleHeartbeatConnection = nil
 end
 
@@ -85,6 +87,7 @@ function GrabService:Start()
 		self.BaseWalkSpeedByPlayer[player] = nil
 		self.HeldCharacterStateByPlayer[player] = nil
 		self.LastStruggleRequestByPlayer[player] = nil
+		self.PlayerGrabCooldownUntil[player] = nil
 	end)
 end
 
@@ -102,6 +105,13 @@ function GrabService:RequestGrab(player, feedable)
 	local target, isPlayerCharacter = self:ResolveGrabbableTarget(player, feedable)
 	if target == nil then
 		return
+	end
+
+	if isPlayerCharacter then
+		local targetPlayer = if target:IsA("Model") then Players:GetPlayerFromCharacter(target) else nil
+		if targetPlayer == nil or self:IsPlayerGrabCoolingDown(targetPlayer) then
+			return
+		end
 	end
 
 	if self:GetHeldEntry(player, target) ~= nil then
@@ -512,6 +522,7 @@ function GrabService:EndHeldCharacterState(heldPlayer)
 	local heldState = self.HeldCharacterStateByPlayer[heldPlayer]
 	self.HeldCharacterStateByPlayer[heldPlayer] = nil
 	self.LastStruggleRequestByPlayer[heldPlayer] = nil
+	self.PlayerGrabCooldownUntil[heldPlayer] = os.clock() + PLAYER_DROP_GRAB_COOLDOWN
 
 	local character = heldPlayer.Character
 	if
@@ -527,6 +538,20 @@ function GrabService:EndHeldCharacterState(heldPlayer)
 		character:SetAttribute(self.Constants.ATTRIBUTES.IsGrabbed, false)
 		character:SetAttribute(self.Constants.ATTRIBUTES.GrabStruggleProgress, 0)
 	end
+end
+
+function GrabService:IsPlayerGrabCoolingDown(player): boolean
+	local cooldownUntil = self.PlayerGrabCooldownUntil[player]
+	if typeof(cooldownUntil) ~= "number" then
+		return false
+	end
+
+	if os.clock() >= cooldownUntil then
+		self.PlayerGrabCooldownUntil[player] = nil
+		return false
+	end
+
+	return true
 end
 
 function GrabService:RestoreFeedablePhysics(feedable: Instance)

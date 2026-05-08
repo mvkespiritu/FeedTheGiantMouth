@@ -138,63 +138,36 @@ function UIController:BuildStruggleUI()
 
 	local container = Instance.new("Frame")
 	container.Name = "StruggleMeterContainer"
-	container.AnchorPoint = Vector2.new(1, 0.5)
-	container.Position = UDim2.new(1, -24, 0.5, 0)
-	container.Size = UDim2.fromOffset(92, 300)
+	container.AnchorPoint = Vector2.new(0.5, 0.5)
+	container.Position = UDim2.new(0.75, 0, 0.5, 0)
+	container.Size = UDim2.fromOffset(138, 138)
 	container.BackgroundColor3 = Color3.fromRGB(24, 30, 39)
-	container.BackgroundTransparency = 0.15
+	container.BackgroundTransparency = 0.35
 	container.BorderSizePixel = 0
+	container.ClipsDescendants = true
 	container.Visible = false
 	container.Parent = self.MainHUD
+	local containerAspect = Instance.new("UIAspectRatioConstraint")
+	containerAspect.AspectRatio = 1
+	containerAspect.Parent = container
 	local containerCorner = Instance.new("UICorner")
-	containerCorner.CornerRadius = UDim.new(0, 14)
+	containerCorner.CornerRadius = UDim.new(1, 0)
 	containerCorner.Parent = container
 	local containerStroke = Instance.new("UIStroke")
 	containerStroke.Color = Color3.fromRGB(255, 255, 255)
 	containerStroke.Thickness = 2
-	containerStroke.Transparency = 0.15
+	containerStroke.Transparency = 0.25
 	containerStroke.Parent = container
-
-	local tapLabel = Instance.new("TextLabel")
-	tapLabel.Name = "TapLabel"
-	tapLabel.BackgroundTransparency = 1
-	tapLabel.Size = UDim2.fromOffset(80, 42)
-	tapLabel.Position = UDim2.new(0.5, 0, 0, 14)
-	tapLabel.AnchorPoint = Vector2.new(0.5, 0)
-	tapLabel.Font = Enum.Font.GothamBlack
-	tapLabel.Text = "Tap!"
-	tapLabel.TextSize = 32
-	tapLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-	tapLabel.Parent = container
-
-	local meterBackground = Instance.new("Frame")
-	meterBackground.Name = "MeterBackground"
-	meterBackground.AnchorPoint = Vector2.new(0.5, 1)
-	meterBackground.Position = UDim2.new(0.5, 0, 1, -16)
-	meterBackground.Size = UDim2.fromOffset(30, 224)
-	meterBackground.BackgroundColor3 = Color3.fromRGB(10, 12, 18)
-	meterBackground.BorderSizePixel = 0
-	meterBackground.Parent = container
-	local meterCorner = Instance.new("UICorner")
-	meterCorner.CornerRadius = UDim.new(0, 10)
-	meterCorner.Parent = meterBackground
-	local meterStroke = Instance.new("UIStroke")
-	meterStroke.Color = Color3.fromRGB(255, 255, 255)
-	meterStroke.Thickness = 1
-	meterStroke.Transparency = 0.2
-	meterStroke.Parent = meterBackground
 
 	local fill = Instance.new("Frame")
 	fill.Name = "MeterFill"
-	fill.AnchorPoint = Vector2.new(0, 1)
+	fill.AnchorPoint = Vector2.new(0, 0)
 	fill.Position = UDim2.fromScale(0, 1)
-	fill.Size = UDim2.fromScale(1, 0)
+	fill.Size = UDim2.fromScale(1, 1)
 	fill.BackgroundColor3 = Color3.fromRGB(255, 130, 76)
 	fill.BorderSizePixel = 0
-	fill.Parent = meterBackground
-	local fillCorner = Instance.new("UICorner")
-	fillCorner.CornerRadius = UDim.new(0, 10)
-	fillCorner.Parent = fill
+	fill.ZIndex = 2
+	fill.Parent = container
 	local fillGradient = Instance.new("UIGradient")
 	fillGradient.Color = ColorSequence.new({
 		ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 88, 88)),
@@ -202,6 +175,19 @@ function UIController:BuildStruggleUI()
 	})
 	fillGradient.Rotation = 90
 	fillGradient.Parent = fill
+
+	local tapLabel = Instance.new("TextLabel")
+	tapLabel.Name = "TapLabel"
+	tapLabel.BackgroundTransparency = 1
+	tapLabel.Size = UDim2.fromScale(1, 1)
+	tapLabel.Font = Enum.Font.GothamBlack
+	tapLabel.Text = "Tap!"
+	tapLabel.TextSize = 34
+	tapLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+	tapLabel.TextStrokeColor3 = Color3.fromRGB(13, 15, 20)
+	tapLabel.TextStrokeTransparency = 0.35
+	tapLabel.ZIndex = 3
+	tapLabel.Parent = container
 
 	self.StruggleMeterContainer = container
 	self.StruggleMeterFill = fill
@@ -242,7 +228,7 @@ function UIController:UpdateStruggleUI(character: Model?)
 
 	if character == nil then
 		self.StruggleMeterContainer.Visible = false
-		self.StruggleMeterFill.Size = UDim2.fromScale(1, 0)
+		self.StruggleMeterFill.Position = UDim2.fromScale(0, 1)
 		return
 	end
 
@@ -250,7 +236,7 @@ function UIController:UpdateStruggleUI(character: Model?)
 	local rawProgress = character:GetAttribute(self.Constants.ATTRIBUTES.GrabStruggleProgress)
 	local progress = if typeof(rawProgress) == "number" then math.clamp(rawProgress, 0, 1) else 0
 	self.StruggleMeterContainer.Visible = isGrabbed
-	self.StruggleMeterFill.Size = UDim2.fromScale(1, progress)
+	self.StruggleMeterFill.Position = UDim2.fromScale(0, 1 - progress)
 	self.StruggleTapLabel.Text = if isGrabbed then "Tap!" else ""
 end
 

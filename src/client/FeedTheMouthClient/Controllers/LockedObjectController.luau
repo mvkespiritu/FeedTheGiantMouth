@@ -330,12 +330,30 @@ function LockedObjectController:IsAvailableFeedable(feedable: Instance): boolean
 		return false
 	end
 
+	if self:IsFeedableHeld(feedable) then
+		return false
+	end
+
 	local requiredStrength = feedable:GetAttribute(attributes.RequiredStrength)
 	if typeof(requiredStrength) ~= "number" then
 		requiredStrength = 1
 	end
 
 	return requiredStrength <= self.CurrentStrength
+end
+
+function LockedObjectController:IsFeedableHeld(feedable: Instance): boolean
+	for _, descendant in ipairs(feedable:GetDescendants()) do
+		if descendant:IsA("WeldConstraint") and descendant.Name == HOLD_WELD_NAME then
+			local part0 = descendant.Part0
+			local part1 = descendant.Part1
+			if part0 ~= nil and part1 ~= nil and part0.Parent ~= nil and part1.Parent ~= nil then
+				return true
+			end
+		end
+	end
+
+	return false
 end
 
 function LockedObjectController:GetFeedablePosition(feedable: Instance): Vector3?

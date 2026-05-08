@@ -12,6 +12,12 @@ local CHEW_IDLE_TIMEOUT = 4
 local CHEW_CLOSE_TIME = 0.12
 local CHEW_OPEN_TIME = 0.16
 local CHEW_PAUSE_TIME = 0.04
+local PLAYER_CHEW_DURATION = 2
+local PLAYER_REEAT_COOLDOWN = 1
+local PLAYER_SPIT_SPEED = 100
+local PLAYER_SPIT_UPWARD_SPEED = 70
+local PLAYER_SPIT_NO_COLLISION_GRACE = 0.35
+local PLAYER_RAGDOLL_DURATION = 1.8
 local MOUTH_MODEL_NAME = "MouthModel"
 local CHEW_SOUND_NAME = "ChewingSound"
 local CHEW_SFX_NAME = "MouthChew"
@@ -22,6 +28,9 @@ function MouthService:Init(context)
 	self.AudioConfig = require(context.shared.AudioConfig)
 	self.LastEatTime = 0
 	self.IsChewing = false
+	self.PlayersBeingChewed = {}
+	self.PlayerEatCooldownUntil = {}
+	self.PlayerRagdollDataByPlayer = {}
 end
 
 function MouthService:Start()
@@ -34,6 +43,12 @@ function MouthService:Start()
 	eatZone.CanTouch = true
 	eatZone.Touched:Connect(function(hit)
 		self:TryEat(hit)
+	end)
+
+	Players.PlayerRemoving:Connect(function(player)
+		self.PlayersBeingChewed[player] = nil
+		self.PlayerEatCooldownUntil[player] = nil
+		self:DeactivatePlayerRagdoll(player)
 	end)
 end
 
@@ -50,6 +65,12 @@ function MouthService:GetEatZone(): BasePart?
 end
 
 function MouthService:TryEat(hit: BasePart)
+	local player = self:GetPlayerFromHit(hit)
+	if player ~= nil then
+		self:TryEatPlayer(player)
+		return
+	end
+
 	local feedableService = self.Context.services.FeedableService
 	local feedable = feedableService:FindFeedableFromInstance(hit)
 	if feedable == nil then
@@ -64,11 +85,11 @@ function MouthService:TryEat(hit: BasePart)
 	self:MarkConsumed(feedable)
 	self:StartChewing()
 
-	local player = self:GetFeeder(feedable, hit.Position)
+	local feeder = self:GetFeeder(feedable, hit.Position)
 	local reward = 0
-	if player ~= nil then
-		reward = self.Context.services.EconomyService:AwardFeedReward(player, feedable)
-		self.Context.services.FeedbackService:Play(player, "Reward", {
+	if feeder ~= nil then
+		reward = self.Context.services.EconomyService:AwardFeedReward(feeder, feedable)
+		self.Context.services.FeedbackService:Play(feeder, "Reward", {
 			amount = reward,
 			tier = feedable:GetAttribute(attributes.Tier),
 		})
@@ -85,6 +106,280 @@ function MouthService:TryEat(hit: BasePart)
 			feedable:Destroy()
 		end
 	end)
+end
+
+function MouthService:GetPlayerFromHit(hit: BasePart): Player?
+	local character = hit:FindFirstAncestorOfClass("Model")
+	if character == nil then
+		return nil
+	end
+
+	local player = Players:GetPlayerFromCharacter(character)
+	if player ~= nil then
+		return player
+	end
+
+	return nil
+end
+
+function MouthService:TryEatPlayer(player: Player)
+	local now = os.clock()
+	local cooldownUntil = self.PlayerEatCooldownUntil[player]
+	if typeof(cooldownUntil) == "number" and now < cooldownUntil then
+		return
+	end
+
+	if self.PlayersBeingChewed[player] == true then
+		return
+	end
+
+	local character = player.Character
+	local humanoidRootPart = if character ~= nil then character:FindFirstChild("HumanoidRootPart") else nil
+	local humanoid = if character ~= nil then character:FindFirstChildOfClass("Humanoid") else nil
+	if humanoidRootPart == nil or not humanoidRootPart:IsA("BasePart") or humanoid == nil or humanoid.Health <= 0 then
+		return
+	end
+
+	local eatZone = self:GetEatZone()
+	local chewCenter = if eatZone ~= nil then eatZone.Position else humanoidRootPart.Position
+	local spitDirection = self:GetSpitDirection(humanoidRootPart.Position, chewCenter, eatZone)
+	local noCollisionConstraints = self:CreateMouthNoCollisionConstraints(character)
+
+	self.PlayersBeingChewed[player] = true
+	self.PlayerEatCooldownUntil[player] = now + PLAYER_CHEW_DURATION + PLAYER_REEAT_COOLDOWN
+	self.Context.services.GrabService:RequestRelease(player)
+	self:StartChewing()
+	self.Context.services.FeedbackService:Play(player, "MouthPlayerSequence", {
+		chewDuration = PLAYER_CHEW_DURATION,
+		spitDuration = PLAYER_RAGDOLL_DURATION,
+		mouthPosition = chewCenter,
+		spitDirection = spitDirection,
+	})
+
+	humanoidRootPart.CFrame = CFrame.new(chewCenter)
+	humanoidRootPart.AssemblyLinearVelocity = Vector3.zero
+	humanoidRootPart.AssemblyAngularVelocity = Vector3.zero
+	humanoidRootPart.Anchored = true
+
+	task.delay(PLAYER_CHEW_DURATION, function()
+		self.PlayersBeingChewed[player] = nil
+
+		if humanoidRootPart.Parent ~= nil then
+			humanoidRootPart.Anchored = false
+		end
+
+		local currentCharacter = player.Character
+		if currentCharacter ~= character then
+			return
+		end
+
+		local currentRootPart = if currentCharacter ~= nil
+			then currentCharacter:FindFirstChild("HumanoidRootPart")
+			else nil
+		local currentHumanoid = if currentCharacter ~= nil
+			then currentCharacter:FindFirstChildOfClass("Humanoid")
+			else nil
+		if
+			currentRootPart == nil
+			or not currentRootPart:IsA("BasePart")
+			or currentHumanoid == nil
+			or currentHumanoid.Health <= 0
+		then
+			return
+		end
+
+		self:ActivatePlayerRagdoll(player, currentCharacter, currentHumanoid)
+		currentRootPart.Anchored = false
+		currentRootPart.AssemblyLinearVelocity = (spitDirection * PLAYER_SPIT_SPEED)
+			+ Vector3.new(0, PLAYER_SPIT_UPWARD_SPEED, 0)
+
+		task.delay(PLAYER_RAGDOLL_DURATION, function()
+			self:DeactivatePlayerRagdoll(player, currentCharacter)
+		end)
+	end)
+
+	task.delay(PLAYER_CHEW_DURATION + PLAYER_REEAT_COOLDOWN + PLAYER_SPIT_NO_COLLISION_GRACE, function()
+		self:ClearNoCollisionConstraints(noCollisionConstraints)
+	end)
+end
+
+function MouthService:GetSpitDirection(entryPosition: Vector3, chewCenter: Vector3, eatZone: BasePart?): Vector3
+	local offset = entryPosition - chewCenter
+	if offset.Magnitude > 0.05 then
+		return offset.Unit
+	end
+
+	if eatZone ~= nil then
+		local fallbackDirection = -eatZone.CFrame.LookVector
+		if fallbackDirection.Magnitude > 0.05 then
+			return fallbackDirection.Unit
+		end
+	end
+
+	return Vector3.new(0, 0, -1)
+end
+
+function MouthService:GetCharacterBaseParts(character: Model): { BasePart }
+	local parts = {}
+	for _, descendant in ipairs(character:GetDescendants()) do
+		if descendant:IsA("BasePart") then
+			table.insert(parts, descendant)
+		end
+	end
+
+	return parts
+end
+
+function MouthService:GetMouthCollisionParts(): { BasePart }
+	local parts = {}
+
+	local mouthModel = self:GetMouthModel()
+	if mouthModel ~= nil then
+		for _, descendant in ipairs(mouthModel:GetDescendants()) do
+			if descendant:IsA("BasePart") then
+				table.insert(parts, descendant)
+			end
+		end
+	end
+
+	local eatZone = self:GetEatZone()
+	if eatZone ~= nil then
+		table.insert(parts, eatZone)
+	end
+
+	return parts
+end
+
+function MouthService:CreateMouthNoCollisionConstraints(character: Model): { NoCollisionConstraint }
+	local characterParts = self:GetCharacterBaseParts(character)
+	local mouthParts = self:GetMouthCollisionParts()
+	local constraints = {}
+
+	if #characterParts == 0 or #mouthParts == 0 then
+		return constraints
+	end
+
+	for _, characterPart in ipairs(characterParts) do
+		for _, mouthPart in ipairs(mouthParts) do
+			if characterPart ~= mouthPart then
+				local noCollision = Instance.new("NoCollisionConstraint")
+				noCollision.Part0 = characterPart
+				noCollision.Part1 = mouthPart
+				noCollision.Parent = characterPart
+				table.insert(constraints, noCollision)
+			end
+		end
+	end
+
+	return constraints
+end
+
+function MouthService:ClearNoCollisionConstraints(constraints: { NoCollisionConstraint })
+	for _, constraint in ipairs(constraints) do
+		if constraint.Parent ~= nil then
+			constraint:Destroy()
+		end
+	end
+end
+
+function MouthService:ActivatePlayerRagdoll(player: Player, character: Model, humanoid: Humanoid)
+	self:DeactivatePlayerRagdoll(player)
+
+	local ragdollData = {
+		character = character,
+		humanoid = humanoid,
+		motors = {},
+		createdInstances = {},
+		requiresNeck = humanoid.RequiresNeck,
+		autoRotate = humanoid.AutoRotate,
+	}
+	self.PlayerRagdollDataByPlayer[player] = ragdollData
+
+	humanoid.RequiresNeck = false
+	humanoid.AutoRotate = false
+	humanoid.PlatformStand = true
+	humanoid:ChangeState(Enum.HumanoidStateType.Physics)
+
+	for _, descendant in ipairs(character:GetDescendants()) do
+		if descendant:IsA("Motor6D") then
+			local part0 = descendant.Part0
+			local part1 = descendant.Part1
+			if part0 == nil or part1 == nil then
+				continue
+			end
+
+			table.insert(ragdollData.motors, {
+				motor = descendant,
+				enabled = descendant.Enabled,
+			})
+
+			local attachment0 = Instance.new("Attachment")
+			attachment0.Name = "MouthRagdollA0"
+			attachment0.CFrame = descendant.C0
+			attachment0.Parent = part0
+
+			local attachment1 = Instance.new("Attachment")
+			attachment1.Name = "MouthRagdollA1"
+			attachment1.CFrame = descendant.C1
+			attachment1.Parent = part1
+
+			local ballSocket = Instance.new("BallSocketConstraint")
+			ballSocket.Name = "MouthRagdollJoint"
+			ballSocket.Attachment0 = attachment0
+			ballSocket.Attachment1 = attachment1
+			ballSocket.LimitsEnabled = true
+			ballSocket.TwistLimitsEnabled = true
+			ballSocket.Parent = part0
+
+			table.insert(ragdollData.createdInstances, ballSocket)
+			table.insert(ragdollData.createdInstances, attachment0)
+			table.insert(ragdollData.createdInstances, attachment1)
+
+			descendant.Enabled = false
+		end
+	end
+end
+
+function MouthService:DeactivatePlayerRagdoll(player: Player, expectedCharacter: Model?)
+	local ragdollData = self.PlayerRagdollDataByPlayer[player]
+	if ragdollData == nil then
+		return
+	end
+
+	if expectedCharacter ~= nil and ragdollData.character ~= expectedCharacter then
+		if ragdollData.character == nil or ragdollData.character.Parent == nil then
+			self.PlayerRagdollDataByPlayer[player] = nil
+		end
+		return
+	end
+
+	self.PlayerRagdollDataByPlayer[player] = nil
+
+	for _, createdInstance in ipairs(ragdollData.createdInstances) do
+		if typeof(createdInstance) == "Instance" and createdInstance.Parent ~= nil then
+			createdInstance:Destroy()
+		end
+	end
+
+	for _, motorEntry in ipairs(ragdollData.motors) do
+		local motor = motorEntry.motor
+		if typeof(motor) == "Instance" and motor:IsA("Motor6D") and motor.Parent ~= nil then
+			motor.Enabled = motorEntry.enabled
+		end
+	end
+
+	local humanoid = ragdollData.humanoid
+	if
+		typeof(humanoid) == "Instance"
+		and humanoid:IsA("Humanoid")
+		and humanoid.Parent ~= nil
+		and humanoid.Health > 0
+	then
+		humanoid.PlatformStand = false
+		humanoid.AutoRotate = ragdollData.autoRotate
+		humanoid.RequiresNeck = ragdollData.requiresNeck
+		humanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
+	end
 end
 
 function MouthService:StartChewing()
@@ -142,7 +437,7 @@ function MouthService:GetMouthModel(): Model?
 	return nil
 end
 
-function MouthService:CaptureMouthCFrames(mouthModel: Model): {[BasePart]: CFrame}
+function MouthService:CaptureMouthCFrames(mouthModel: Model): { [BasePart]: CFrame }
 	local restCFrames = {}
 	for _, descendant in ipairs(mouthModel:GetDescendants()) do
 		if descendant:IsA("BasePart") then
@@ -213,7 +508,7 @@ function MouthService:GetChewOffset(partName: string): Vector3
 	return Vector3.zero
 end
 
-function MouthService:TweenMouth(restCFrames: {[BasePart]: CFrame}, closed: boolean, duration: number)
+function MouthService:TweenMouth(restCFrames: { [BasePart]: CFrame }, closed: boolean, duration: number)
 	local tweenInfo = TweenInfo.new(duration, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut)
 	for part, restCFrame in pairs(restCFrames) do
 		if part.Parent == nil then

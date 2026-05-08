@@ -11,6 +11,7 @@ local remotes = feedRoot:WaitForChild("Remotes")
 
 local controllerOrder = {
 	"AudioController",
+	"CameraController",
 	"InputController",
 	"GrabController",
 	"UIController",

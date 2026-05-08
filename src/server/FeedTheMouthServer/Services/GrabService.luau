@@ -40,6 +40,7 @@ local STRUGGLE_DECAY_PER_SECOND = 0.125
 local STRUGGLE_TAP_COOLDOWN = 0.06
 local STRUGGLE_ESCAPE_THRESHOLD = 1
 local PLAYER_DROP_GRAB_COOLDOWN = 3
+local PLAYER_GRAB_COOLDOWN_BILLBOARD_NAME = "GrabCooldownBillboard"
 
 function GrabService:Init(context)
 	self.Context = context
@@ -523,6 +524,7 @@ function GrabService:EndHeldCharacterState(heldPlayer)
 	self.HeldCharacterStateByPlayer[heldPlayer] = nil
 	self.LastStruggleRequestByPlayer[heldPlayer] = nil
 	self.PlayerGrabCooldownUntil[heldPlayer] = os.clock() + PLAYER_DROP_GRAB_COOLDOWN
+	self:ShowPlayerGrabCooldownBillboard(heldPlayer)
 
 	local character = heldPlayer.Character
 	if
@@ -552,6 +554,81 @@ function GrabService:IsPlayerGrabCoolingDown(player): boolean
 	end
 
 	return true
+end
+
+function GrabService:ShowPlayerGrabCooldownBillboard(player)
+	local character = player.Character
+	if character == nil then
+		return
+	end
+
+	local adornee = character:FindFirstChild("Head") or character:FindFirstChild("HumanoidRootPart")
+	if adornee == nil or not adornee:IsA("BasePart") then
+		return
+	end
+
+	local existing = character:FindFirstChild(PLAYER_GRAB_COOLDOWN_BILLBOARD_NAME)
+	if existing ~= nil then
+		existing:Destroy()
+	end
+
+	local billboard = Instance.new("BillboardGui")
+	billboard.Name = PLAYER_GRAB_COOLDOWN_BILLBOARD_NAME
+	billboard.Adornee = adornee
+	billboard.AlwaysOnTop = true
+	billboard.LightInfluence = 0
+	billboard.MaxDistance = 80
+	billboard.Size = UDim2.fromOffset(74, 6)
+	billboard.StudsOffset = Vector3.new(0, 3.1, 0)
+	billboard.Parent = character
+
+	local frame = Instance.new("Frame")
+	frame.Name = "Background"
+	frame.BackgroundColor3 = Color3.fromRGB(18, 22, 28)
+	frame.BackgroundTransparency = 0.48
+	frame.BorderSizePixel = 0
+	frame.Size = UDim2.fromScale(1, 1)
+	frame.Parent = billboard
+
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(1, 0)
+	corner.Parent = frame
+
+	local fill = Instance.new("Frame")
+	fill.Name = "Fill"
+	fill.BackgroundColor3 = Color3.fromRGB(245, 248, 252)
+	fill.BackgroundTransparency = 0.08
+	fill.BorderSizePixel = 0
+	fill.Size = UDim2.fromScale(1, 1)
+	fill.Parent = frame
+
+	local fillCorner = Instance.new("UICorner")
+	fillCorner.CornerRadius = UDim.new(1, 0)
+	fillCorner.Parent = fill
+
+	task.spawn(function()
+		while billboard.Parent ~= nil do
+			local cooldownUntil = self.PlayerGrabCooldownUntil[player]
+			if typeof(cooldownUntil) ~= "number" then
+				break
+			end
+
+			local remaining = cooldownUntil - os.clock()
+			if remaining <= 0 then
+				if self.PlayerGrabCooldownUntil[player] == cooldownUntil then
+					self.PlayerGrabCooldownUntil[player] = nil
+				end
+				break
+			end
+
+			fill.Size = UDim2.fromScale(math.clamp(remaining / PLAYER_DROP_GRAB_COOLDOWN, 0, 1), 1)
+			task.wait(0.1)
+		end
+
+		if billboard.Parent ~= nil then
+			billboard:Destroy()
+		end
+	end)
 end
 
 function GrabService:RestoreFeedablePhysics(feedable: Instance)

@@ -24,12 +24,16 @@ local THROW_WEIGHT_PENALTY_PER_UNIT = 0.015
 local MIN_THROW_SPEED_MULTIPLIER = 0.55
 local INTERNAL_WELD_NAME = "FeedTheMouthInternalWeld"
 local HOLD_WELD_NAME = "FeedTheMouthHoldWeld"
-local PLAYER_GRAB_WEIGHT = 10
+local PLAYER_GRAB_WEIGHT = 1
 local PLAYER_CARRY_BOTTOM_OFFSET = 3
 local HELD_PLAYER_WALK_SPEED = 0
 local HELD_PLAYER_JUMP_POWER = 0
 local HELD_PLAYER_JUMP_HEIGHT = 0
 local PLAYER_THROW_OWNERSHIP_RESTORE_DELAY = 0.12
+local PLAYER_THROW_SPEED_MULTIPLIER = 1.5 --1
+local PLAYER_THROW_WEIGHT_PENALTY_PER_UNIT = 0.01 --0.05
+local PLAYER_THROW_STRENGTH_REDUCTION_PER_LEVEL = 0.5 --2
+local PLAYER_THROW_MIN_SPEED_MULTIPLIER = 0.55 --0.35
 
 function GrabService:Init(context)
 	self.Context = context
@@ -691,12 +695,25 @@ function GrabService:ApplyThrowVelocity(player, held, direction)
 	local speed = BASE_THROW_SPEED + ((throwPowerLevel - 1) * THROW_POWER_PER_LEVEL)
 	local heldWeight = self:GetWeightFromFeedable(held.feedable)
 	local strengthLevel = self.Context.services.PlayerDataService:GetUpgradeLevel(player, "Strength")
-	local strengthReduction = math.max(0, strengthLevel - 1) * STRENGTH_WEIGHT_REDUCTION_PER_LEVEL
+	local isPlayerCharacter = held.isPlayerCharacter == true
+	local strengthReductionPerLevel = if isPlayerCharacter
+		then PLAYER_THROW_STRENGTH_REDUCTION_PER_LEVEL
+		else STRENGTH_WEIGHT_REDUCTION_PER_LEVEL
+	local weightPenaltyPerUnit = if isPlayerCharacter
+		then PLAYER_THROW_WEIGHT_PENALTY_PER_UNIT
+		else THROW_WEIGHT_PENALTY_PER_UNIT
+	local minThrowSpeedMultiplier = if isPlayerCharacter
+		then PLAYER_THROW_MIN_SPEED_MULTIPLIER
+		else MIN_THROW_SPEED_MULTIPLIER
+	local strengthReduction = math.max(0, strengthLevel - 1) * strengthReductionPerLevel
 	local effectiveWeight = math.max(0, heldWeight - strengthReduction)
-	local throwMultiplier =
-		math.clamp(1 - (effectiveWeight * THROW_WEIGHT_PENALTY_PER_UNIT), MIN_THROW_SPEED_MULTIPLIER, 1)
+	local throwMultiplier = math.clamp(1 - (effectiveWeight * weightPenaltyPerUnit), minThrowSpeedMultiplier, 1)
 	speed *= throwMultiplier
-	local thrownPlayer = if held.isPlayerCharacter == true
+	if isPlayerCharacter then
+		speed *= PLAYER_THROW_SPEED_MULTIPLIER
+	end
+
+	local thrownPlayer = if isPlayerCharacter
 			and typeof(held.feedable) == "Instance"
 			and held.feedable:IsA("Model")
 		then Players:GetPlayerFromCharacter(held.feedable)

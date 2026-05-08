@@ -1,6 +1,7 @@
 --!strict
 
 local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
 
 local GrabService = {}
 GrabService.Name = "GrabService"
@@ -34,6 +35,10 @@ local PLAYER_THROW_SPEED_MULTIPLIER = 1.5 --1
 local PLAYER_THROW_WEIGHT_PENALTY_PER_UNIT = 0.01 --0.05
 local PLAYER_THROW_STRENGTH_REDUCTION_PER_LEVEL = 0.5 --2
 local PLAYER_THROW_MIN_SPEED_MULTIPLIER = 0.55 --0.35
+local STRUGGLE_FILL_PER_TAP = 0.08 --0.15
+local STRUGGLE_DECAY_PER_SECOND = 0.125
+local STRUGGLE_TAP_COOLDOWN = 0.06
+local STRUGGLE_ESCAPE_THRESHOLD = 1
 
 function GrabService:Init(context)
 	self.Context = context
@@ -41,8 +46,12 @@ function GrabService:Init(context)
 	self.RequestGrabRemote = context.remotes:WaitForChild("RequestGrab")
 	self.RequestReleaseRemote = context.remotes:WaitForChild("RequestRelease")
 	self.RequestThrowRemote = context.remotes:WaitForChild("RequestThrow")
+	self.RequestStruggleRemote = context.remotes:WaitForChild("RequestStruggle")
 	self.HeldByPlayer = {}
 	self.BaseWalkSpeedByPlayer = {}
+	self.HeldCharacterStateByPlayer = {}
+	self.LastStruggleRequestByPlayer = {}
+	self.StruggleHeartbeatConnection = nil
 end
 
 function GrabService:Start()
@@ -58,9 +67,24 @@ function GrabService:Start()
 		self:RequestThrow(player, direction)
 	end)
 
+	self.RequestStruggleRemote.OnServerEvent:Connect(function(player)
+		self:RequestStruggle(player)
+	end)
+
+	if self.StruggleHeartbeatConnection ~= nil then
+		self.StruggleHeartbeatConnection:Disconnect()
+		self.StruggleHeartbeatConnection = nil
+	end
+
+	self.StruggleHeartbeatConnection = RunService.Heartbeat:Connect(function(deltaTime)
+		self:UpdateHeldCharacterStruggles(deltaTime)
+	end)
+
 	Players.PlayerRemoving:Connect(function(player)
 		self:ClearHeld(player)
 		self.BaseWalkSpeedByPlayer[player] = nil
+		self.HeldCharacterStateByPlayer[player] = nil
+		self.LastStruggleRequestByPlayer[player] = nil
 	end)
 end
 
@@ -237,6 +261,7 @@ function GrabService:AddHeldObject(
 		local heldPlayer = Players:GetPlayerFromCharacter(feedable)
 		if heldPlayer ~= nil then
 			self:ClearHeld(heldPlayer)
+			self:BeginHeldCharacterState(heldPlayer, player)
 		end
 	end
 
@@ -464,6 +489,46 @@ function GrabService:RestoreHeldCharacterControl(state)
 	end
 end
 
+function GrabService:BeginHeldCharacterState(heldPlayer, holder)
+	local character = heldPlayer.Character
+	if character == nil then
+		return
+	end
+
+	local heldState = self.HeldCharacterStateByPlayer[heldPlayer]
+	if heldState == nil then
+		heldState = {}
+		self.HeldCharacterStateByPlayer[heldPlayer] = heldState
+	end
+
+	heldState.character = character
+	heldState.holder = holder
+	heldState.progress = 0
+	character:SetAttribute(self.Constants.ATTRIBUTES.IsGrabbed, true)
+	character:SetAttribute(self.Constants.ATTRIBUTES.GrabStruggleProgress, 0)
+end
+
+function GrabService:EndHeldCharacterState(heldPlayer)
+	local heldState = self.HeldCharacterStateByPlayer[heldPlayer]
+	self.HeldCharacterStateByPlayer[heldPlayer] = nil
+	self.LastStruggleRequestByPlayer[heldPlayer] = nil
+
+	local character = heldPlayer.Character
+	if
+		character == nil
+		and heldState ~= nil
+		and typeof(heldState.character) == "Instance"
+		and heldState.character:IsA("Model")
+	then
+		character = heldState.character
+	end
+
+	if character ~= nil then
+		character:SetAttribute(self.Constants.ATTRIBUTES.IsGrabbed, false)
+		character:SetAttribute(self.Constants.ATTRIBUTES.GrabStruggleProgress, 0)
+	end
+end
+
 function GrabService:RestoreFeedablePhysics(feedable: Instance)
 	local targetPlayer = if feedable:IsA("Model") then Players:GetPlayerFromCharacter(feedable) else nil
 	if targetPlayer ~= nil then
@@ -651,6 +716,13 @@ function GrabService:DetachHeldEntry(held, restoreCollisionNow: boolean?)
 	self:RestoreHeldCharacterControl(held.heldCharacterControlState)
 	held.heldCharacterControlState = nil
 
+	if held.isPlayerCharacter == true and typeof(held.feedable) == "Instance" and held.feedable:IsA("Model") then
+		local heldPlayer = Players:GetPlayerFromCharacter(held.feedable)
+		if heldPlayer ~= nil then
+			self:EndHeldCharacterState(heldPlayer)
+		end
+	end
+
 	if restoreCollisionNow and typeof(held.feedable) == "Instance" and held.feedable.Parent ~= nil then
 		self:RestoreFeedablePhysics(held.feedable)
 	end
@@ -784,6 +856,107 @@ function GrabService:RequestThrow(player, direction, targetFeedable: Instance?)
 		held.noCollisionConstraints = nil
 	end)
 	self.Context.services.FeedbackService:Play(player, "ThrowObject", {})
+end
+
+function GrabService:FindHolderHoldingCharacter(character: Model): (Player?, any?)
+	for holder, heldList in pairs(self.HeldByPlayer) do
+		for _, held in ipairs(heldList) do
+			if held.isPlayerCharacter == true and held.feedable == character then
+				return holder, held
+			end
+		end
+	end
+
+	return nil, nil
+end
+
+function GrabService:UpdateHeldCharacterStruggles(deltaTime: number)
+	if deltaTime <= 0 then
+		return
+	end
+
+	for heldPlayer, heldState in pairs(self.HeldCharacterStateByPlayer) do
+		local character = heldPlayer.Character
+		if character == nil then
+			self:EndHeldCharacterState(heldPlayer)
+			continue
+		end
+
+		local holder = heldState.holder
+		local holderEntry = nil
+		if typeof(holder) == "Instance" and holder:IsA("Player") then
+			holderEntry = self:GetHeldEntry(holder, character)
+		end
+
+		if holderEntry == nil then
+			local foundHolder, foundEntry = self:FindHolderHoldingCharacter(character)
+			holder = foundHolder
+			holderEntry = foundEntry
+			heldState.holder = foundHolder
+		end
+
+		if holderEntry == nil then
+			self:EndHeldCharacterState(heldPlayer)
+			continue
+		end
+
+		local previousProgress = if typeof(heldState.progress) == "number" then heldState.progress else 0
+		local nextProgress = math.max(0, previousProgress - (deltaTime * STRUGGLE_DECAY_PER_SECOND))
+		if math.abs(nextProgress - previousProgress) >= 0.001 then
+			heldState.progress = nextProgress
+			character:SetAttribute(self.Constants.ATTRIBUTES.GrabStruggleProgress, nextProgress)
+		end
+	end
+end
+
+function GrabService:RequestStruggle(player)
+	if not self:IsPlayerCharacterHeld(player) then
+		return
+	end
+
+	local now = os.clock()
+	local lastRequest = self.LastStruggleRequestByPlayer[player]
+	if typeof(lastRequest) == "number" and (now - lastRequest) < STRUGGLE_TAP_COOLDOWN then
+		return
+	end
+	self.LastStruggleRequestByPlayer[player] = now
+
+	local character = player.Character
+	if character == nil then
+		return
+	end
+
+	local heldState = self.HeldCharacterStateByPlayer[player]
+	if heldState == nil then
+		local holder = self:FindHolderHoldingCharacter(character)
+		if holder == nil then
+			return
+		end
+		self:BeginHeldCharacterState(player, holder)
+		heldState = self.HeldCharacterStateByPlayer[player]
+	end
+	if heldState == nil then
+		return
+	end
+
+	local previousProgress = if typeof(heldState.progress) == "number" then heldState.progress else 0
+	local nextProgress = math.clamp(previousProgress + STRUGGLE_FILL_PER_TAP, 0, STRUGGLE_ESCAPE_THRESHOLD)
+	heldState.progress = nextProgress
+	character:SetAttribute(self.Constants.ATTRIBUTES.GrabStruggleProgress, nextProgress)
+
+	if nextProgress >= STRUGGLE_ESCAPE_THRESHOLD then
+		local holder = heldState.holder
+		if typeof(holder) ~= "Instance" or not holder:IsA("Player") then
+			local foundHolder = self:FindHolderHoldingCharacter(character)
+			holder = foundHolder
+		end
+
+		if typeof(holder) == "Instance" and holder:IsA("Player") then
+			self:RemoveHeldEntry(holder, character, true)
+		else
+			self:EndHeldCharacterState(player)
+		end
+	end
 end
 
 function GrabService:IsPlayerCharacterHeld(player): boolean

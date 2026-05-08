@@ -9,12 +9,14 @@ InputController.Name = "InputController"
 
 local TOUCH_TAP_MAX_MOVEMENT = 18
 local TOUCH_TAP_MAX_DURATION = 0.75
+local STRUGGLE_TAP_COOLDOWN = 0.045
 
 function InputController:Init(context)
 	self.Context = context
 	self.Constants = require(context.shared.Constants)
 	self.LocalPlayer = Players.LocalPlayer
 	self.LastGrabRequest = 0
+	self.LastStruggleRequest = 0
 	self.ActiveTouches = {}
 end
 
@@ -26,9 +28,17 @@ function InputController:Start()
 		end
 
 		if input.KeyCode == Enum.KeyCode.E then
-			self:HandlePrimaryAction(mouse.Target)
+			if self:IsLocalPlayerGrabbed() then
+				self:HandleStruggleAction()
+			else
+				self:HandlePrimaryAction(mouse.Target)
+			end
 		elseif input.UserInputType == Enum.UserInputType.MouseButton1 then
-			self:HandlePrimaryAction(mouse.Target)
+			if self:IsLocalPlayerGrabbed() then
+				self:HandleStruggleAction()
+			else
+				self:HandlePrimaryAction(mouse.Target)
+			end
 		elseif input.UserInputType == Enum.UserInputType.Touch then
 			self:TrackTouchStart(input)
 		end
@@ -81,6 +91,11 @@ function InputController:TrackTouchEnd(input: InputObject)
 	end
 
 	if os.clock() - touch.startTime > TOUCH_TAP_MAX_DURATION then
+		return
+	end
+
+	if self:IsLocalPlayerGrabbed() then
+		self:HandleStruggleAction()
 		return
 	end
 
@@ -138,6 +153,25 @@ function InputController:HandlePrimaryAction(instance: Instance?)
 
 	self.Context.controllers.GrabController:RequestGrab(grabbable)
 	self:QueueMarkerRefresh()
+end
+
+function InputController:IsLocalPlayerGrabbed(): boolean
+	local character = self.LocalPlayer.Character
+	if character == nil then
+		return false
+	end
+
+	return character:GetAttribute(self.Constants.ATTRIBUTES.IsGrabbed) == true
+end
+
+function InputController:HandleStruggleAction()
+	local now = os.clock()
+	if now - self.LastStruggleRequest < STRUGGLE_TAP_COOLDOWN then
+		return
+	end
+
+	self.LastStruggleRequest = now
+	self.Context.controllers.GrabController:RequestStruggle()
 end
 
 function InputController:RequestThrow()

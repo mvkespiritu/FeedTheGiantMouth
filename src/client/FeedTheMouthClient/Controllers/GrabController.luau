@@ -20,6 +20,7 @@ function GrabController:Init(context)
 	self.RequestGrabRemote = context.remotes:WaitForChild("RequestGrab")
 	self.RequestReleaseRemote = context.remotes:WaitForChild("RequestRelease")
 	self.RequestThrowRemote = context.remotes:WaitForChild("RequestThrow")
+	self.RequestStruggleRemote = context.remotes:WaitForChild("RequestStruggle")
 end
 
 function GrabController:Start() end
@@ -30,6 +31,10 @@ end
 
 function GrabController:RequestRelease()
 	self.RequestReleaseRemote:FireServer()
+end
+
+function GrabController:RequestStruggle()
+	self.RequestStruggleRemote:FireServer()
 end
 
 function GrabController:FindFeedableFromInstance(instance: Instance): Instance?

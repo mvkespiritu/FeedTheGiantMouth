@@ -12,6 +12,7 @@ local Constants = {
 		"RequestGrab",
 		"RequestRelease",
 		"RequestThrow",
+		"RequestStruggle",
 		"RequestUpgrade",
 		"PlayerDataChanged",
 		"PlayFeedback",
@@ -25,6 +26,8 @@ local Constants = {
 		RequiredStrength = "RequiredStrength",
 		Consumed = "Consumed",
 		LastHolderUserId = "LastHolderUserId",
+		IsGrabbed = "IsGrabbed",
+		GrabStruggleProgress = "GrabStruggleProgress",
 	}),
 
 	TIERS = table.freeze({

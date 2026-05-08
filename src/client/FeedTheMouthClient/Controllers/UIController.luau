@@ -14,10 +14,12 @@ function UIController:Init(context)
 	self.StatusMessageId = 0
 	self.CurrentPlayerData = nil
 	self.UpgradeLevelLabelsById = {}
+	self.StruggleConnections = {}
 end
 
 function UIController:Start()
-	local playerGui = Players.LocalPlayer:WaitForChild("PlayerGui")
+	local localPlayer = Players.LocalPlayer
+	local playerGui = localPlayer:WaitForChild("PlayerGui")
 	self.MainHUD = playerGui:WaitForChild(self.Constants.MAIN_HUD_NAME)
 	self.HUDFrame = self.MainHUD:WaitForChild("HUDFrame")
 	self.CoinsLabel = self.HUDFrame:WaitForChild("CoinsLabel")
@@ -31,11 +33,22 @@ function UIController:Start()
 	self.FeedbackFrame = self.MainHUD:WaitForChild("FeedbackFrame")
 	self.RewardPopupTemplate = self.FeedbackFrame:WaitForChild("RewardPopupTemplate")
 	self.LockMessageLabel = self.FeedbackFrame:WaitForChild("LockMessageLabel")
+	self:BuildStruggleUI()
 	self:BuildUpgradeLevelLabels()
 
 	self.PlayerDataChanged.OnClientEvent:Connect(function(data)
 		self:RenderPlayerData(data)
 	end)
+
+	localPlayer.CharacterAdded:Connect(function(character)
+		self:BindStruggleCharacter(character)
+	end)
+
+	if localPlayer.Character ~= nil then
+		self:BindStruggleCharacter(localPlayer.Character)
+	else
+		self:UpdateStruggleUI(nil)
+	end
 end
 
 function UIController:RenderPlayerData(data)
@@ -116,6 +129,129 @@ function UIController:ShowStatusMessage(message: string)
 			self.LockMessageLabel.Text = ""
 		end
 	end)
+end
+
+function UIController:BuildStruggleUI()
+	if self.MainHUD == nil then
+		return
+	end
+
+	local container = Instance.new("Frame")
+	container.Name = "StruggleMeterContainer"
+	container.AnchorPoint = Vector2.new(1, 0.5)
+	container.Position = UDim2.new(1, -24, 0.5, 0)
+	container.Size = UDim2.fromOffset(92, 300)
+	container.BackgroundColor3 = Color3.fromRGB(24, 30, 39)
+	container.BackgroundTransparency = 0.15
+	container.BorderSizePixel = 0
+	container.Visible = false
+	container.Parent = self.MainHUD
+	local containerCorner = Instance.new("UICorner")
+	containerCorner.CornerRadius = UDim.new(0, 14)
+	containerCorner.Parent = container
+	local containerStroke = Instance.new("UIStroke")
+	containerStroke.Color = Color3.fromRGB(255, 255, 255)
+	containerStroke.Thickness = 2
+	containerStroke.Transparency = 0.15
+	containerStroke.Parent = container
+
+	local tapLabel = Instance.new("TextLabel")
+	tapLabel.Name = "TapLabel"
+	tapLabel.BackgroundTransparency = 1
+	tapLabel.Size = UDim2.fromOffset(80, 42)
+	tapLabel.Position = UDim2.new(0.5, 0, 0, 14)
+	tapLabel.AnchorPoint = Vector2.new(0.5, 0)
+	tapLabel.Font = Enum.Font.GothamBlack
+	tapLabel.Text = "Tap!"
+	tapLabel.TextSize = 32
+	tapLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+	tapLabel.Parent = container
+
+	local meterBackground = Instance.new("Frame")
+	meterBackground.Name = "MeterBackground"
+	meterBackground.AnchorPoint = Vector2.new(0.5, 1)
+	meterBackground.Position = UDim2.new(0.5, 0, 1, -16)
+	meterBackground.Size = UDim2.fromOffset(30, 224)
+	meterBackground.BackgroundColor3 = Color3.fromRGB(10, 12, 18)
+	meterBackground.BorderSizePixel = 0
+	meterBackground.Parent = container
+	local meterCorner = Instance.new("UICorner")
+	meterCorner.CornerRadius = UDim.new(0, 10)
+	meterCorner.Parent = meterBackground
+	local meterStroke = Instance.new("UIStroke")
+	meterStroke.Color = Color3.fromRGB(255, 255, 255)
+	meterStroke.Thickness = 1
+	meterStroke.Transparency = 0.2
+	meterStroke.Parent = meterBackground
+
+	local fill = Instance.new("Frame")
+	fill.Name = "MeterFill"
+	fill.AnchorPoint = Vector2.new(0, 1)
+	fill.Position = UDim2.fromScale(0, 1)
+	fill.Size = UDim2.fromScale(1, 0)
+	fill.BackgroundColor3 = Color3.fromRGB(255, 130, 76)
+	fill.BorderSizePixel = 0
+	fill.Parent = meterBackground
+	local fillCorner = Instance.new("UICorner")
+	fillCorner.CornerRadius = UDim.new(0, 10)
+	fillCorner.Parent = fill
+	local fillGradient = Instance.new("UIGradient")
+	fillGradient.Color = ColorSequence.new({
+		ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 88, 88)),
+		ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 220, 110)),
+	})
+	fillGradient.Rotation = 90
+	fillGradient.Parent = fill
+
+	self.StruggleMeterContainer = container
+	self.StruggleMeterFill = fill
+	self.StruggleTapLabel = tapLabel
+end
+
+function UIController:BindStruggleCharacter(character: Model)
+	for _, connection in ipairs(self.StruggleConnections) do
+		connection:Disconnect()
+	end
+	table.clear(self.StruggleConnections)
+
+	table.insert(self.StruggleConnections, character:GetAttributeChangedSignal(self.Constants.ATTRIBUTES.IsGrabbed):Connect(function()
+		self:UpdateStruggleUI(character)
+	end))
+	table.insert(
+		self.StruggleConnections,
+		character:GetAttributeChangedSignal(self.Constants.ATTRIBUTES.GrabStruggleProgress):Connect(function()
+			self:UpdateStruggleUI(character)
+		end)
+	)
+	table.insert(
+		self.StruggleConnections,
+		character.AncestryChanged:Connect(function(_, parent)
+			if parent == nil then
+				self:UpdateStruggleUI(nil)
+			end
+		end)
+	)
+
+	self:UpdateStruggleUI(character)
+end
+
+function UIController:UpdateStruggleUI(character: Model?)
+	if self.StruggleMeterContainer == nil or self.StruggleMeterFill == nil or self.StruggleTapLabel == nil then
+		return
+	end
+
+	if character == nil then
+		self.StruggleMeterContainer.Visible = false
+		self.StruggleMeterFill.Size = UDim2.fromScale(1, 0)
+		return
+	end
+
+	local isGrabbed = character:GetAttribute(self.Constants.ATTRIBUTES.IsGrabbed) == true
+	local rawProgress = character:GetAttribute(self.Constants.ATTRIBUTES.GrabStruggleProgress)
+	local progress = if typeof(rawProgress) == "number" then math.clamp(rawProgress, 0, 1) else 0
+	self.StruggleMeterContainer.Visible = isGrabbed
+	self.StruggleMeterFill.Size = UDim2.fromScale(1, progress)
+	self.StruggleTapLabel.Text = if isGrabbed then "Tap!" else ""
 end
 
 return UIController

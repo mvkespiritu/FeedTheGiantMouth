@@ -24,6 +24,12 @@ local THROW_WEIGHT_PENALTY_PER_UNIT = 0.015
 local MIN_THROW_SPEED_MULTIPLIER = 0.55
 local INTERNAL_WELD_NAME = "FeedTheMouthInternalWeld"
 local HOLD_WELD_NAME = "FeedTheMouthHoldWeld"
+local PLAYER_GRAB_WEIGHT = 10
+local PLAYER_CARRY_BOTTOM_OFFSET = 3
+local HELD_PLAYER_WALK_SPEED = 0
+local HELD_PLAYER_JUMP_POWER = 0
+local HELD_PLAYER_JUMP_HEIGHT = 0
+local PLAYER_THROW_OWNERSHIP_RESTORE_DELAY = 0.12
 
 function GrabService:Init(context)
 	self.Context = context
@@ -61,29 +67,31 @@ function GrabService:RequestGrab(player, feedable)
 
 	local feedableService = self.Context.services.FeedableService
 	local upgradeService = self.Context.services.UpgradeService
-	feedable = feedableService:FindFeedableFromInstance(feedable)
-	if feedable == nil then
+	local target, isPlayerCharacter = self:ResolveGrabbableTarget(player, feedable)
+	if target == nil then
 		return
 	end
 
-	if self:GetHeldEntry(player, feedable) ~= nil then
-		self:RequestThrow(player, nil, feedable)
+	if self:GetHeldEntry(player, target) ~= nil then
+		self:RequestThrow(player, nil, target)
 		return
 	end
 
-	if self:IsFeedableHeld(feedable) then
+	if self:IsFeedableHeld(target) then
 		return
 	end
 
-	if not feedableService:IsFeedable(feedable) then
+	if not isPlayerCharacter and not feedableService:IsFeedable(target) then
 		return
 	end
 
-	if feedable:GetAttribute(self.Constants.ATTRIBUTES.Consumed) == true then
+	if not isPlayerCharacter and target:GetAttribute(self.Constants.ATTRIBUTES.Consumed) == true then
 		return
 	end
 
-	local requiredStrength = feedable:GetAttribute(self.Constants.ATTRIBUTES.RequiredStrength) or 1
+	local requiredStrength = if isPlayerCharacter
+		then 1
+		else (target:GetAttribute(self.Constants.ATTRIBUTES.RequiredStrength) or 1)
 	if not upgradeService:CanHandleTier(player, requiredStrength) then
 		self.Context.services.FeedbackService:Play(player, "LockedObject", {
 			requiredStrength = requiredStrength,
@@ -97,7 +105,9 @@ function GrabService:RequestGrab(player, feedable)
 		return
 	end
 
-	local rootPart = feedableService:GetRootPart(feedable)
+	local rootPart = if isPlayerCharacter
+		then self:GetCharacterRootPart(target)
+		else feedableService:GetRootPart(target)
 	if rootPart == nil then
 		return
 	end
@@ -109,18 +119,77 @@ function GrabService:RequestGrab(player, feedable)
 		return
 	end
 
-	local maxGrabDistance = self:GetMaxGrabDistance(feedable)
+	local maxGrabDistance = if isPlayerCharacter then MAX_GRAB_DISTANCE else self:GetMaxGrabDistance(target)
 	if (rootPart.Position - humanoidRootPart.Position).Magnitude > maxGrabDistance then
 		return
 	end
 
-	self:PrepareFeedableForHold(feedable, rootPart)
-	self:AddHeldObject(player, feedable, rootPart, humanoidRootPart)
-	feedable:SetAttribute(self.Constants.ATTRIBUTES.LastHolderUserId, player.UserId)
+	self:PrepareTargetForHold(target, rootPart, isPlayerCharacter)
+	self:AddHeldObject(player, target, rootPart, humanoidRootPart, isPlayerCharacter)
+	if not isPlayerCharacter then
+		target:SetAttribute(self.Constants.ATTRIBUTES.LastHolderUserId, player.UserId)
+	end
 	self.Context.services.FeedbackService:Play(player, "GrabObject", {})
 end
 
-function GrabService:PrepareFeedableForHold(feedable: Instance, rootPart: BasePart)
+function GrabService:ResolveGrabbableTarget(player, instance: Instance): (Instance?, boolean)
+	local feedableService = self.Context.services.FeedableService
+	local feedable = feedableService:FindFeedableFromInstance(instance)
+	if feedable ~= nil then
+		return feedable, false
+	end
+
+	local character = self:FindCharacterFromInstance(instance)
+	if character == nil then
+		return nil, false
+	end
+
+	local targetPlayer = Players:GetPlayerFromCharacter(character)
+	if targetPlayer == nil or targetPlayer == player then
+		return nil, false
+	end
+
+	local humanoid = character:FindFirstChildOfClass("Humanoid")
+	if humanoid == nil or humanoid.Health <= 0 then
+		return nil, false
+	end
+
+	return character, true
+end
+
+function GrabService:FindCharacterFromInstance(instance: Instance): Model?
+	local current: Instance? = instance
+	while current ~= nil do
+		if current:IsA("Model") and current:FindFirstChild("HumanoidRootPart") ~= nil then
+			return current
+		end
+
+		current = current.Parent
+	end
+
+	return nil
+end
+
+function GrabService:GetCharacterRootPart(character: Instance): BasePart?
+	if not character:IsA("Model") then
+		return nil
+	end
+
+	local rootPart = character:FindFirstChild("HumanoidRootPart")
+	if rootPart ~= nil and rootPart:IsA("BasePart") then
+		return rootPart
+	end
+
+	return nil
+end
+
+function GrabService:PrepareTargetForHold(feedable: Instance, rootPart: BasePart, isPlayerCharacter: boolean)
+	if isPlayerCharacter then
+		rootPart.Anchored = false
+		rootPart.CanCollide = false
+		return
+	end
+
 	local feedableService = self.Context.services.FeedableService
 	local parts = feedableService:GetBaseParts(feedable)
 
@@ -149,11 +218,20 @@ function GrabService:PrepareFeedableForHold(feedable: Instance, rootPart: BasePa
 	end
 end
 
-function GrabService:AddHeldObject(player, feedable: Instance, rootPart: BasePart, humanoidRootPart: BasePart)
+function GrabService:AddHeldObject(
+	player,
+	feedable: Instance,
+	rootPart: BasePart,
+	humanoidRootPart: BasePart,
+	isPlayerCharacter: boolean
+)
+	local heldCharacterControlState = self:DisableHeldCharacterControl(feedable, isPlayerCharacter)
 	local heldList = self:GetHeldList(player)
 	table.insert(heldList, {
 		feedable = feedable,
 		rootPart = rootPart,
+		isPlayerCharacter = isPlayerCharacter,
+		heldCharacterControlState = heldCharacterControlState,
 		noCollisionConstraints = self:CreateCharacterNoCollisionConstraints(player, feedable),
 	})
 
@@ -249,6 +327,11 @@ function GrabService:GetFeedableBoundsSize(feedable: Instance): Vector3
 end
 
 function GrabService:GetCarryBottomOffset(feedable: Instance): number
+	local targetPlayer = if feedable:IsA("Model") then Players:GetPlayerFromCharacter(feedable) else nil
+	if targetPlayer ~= nil then
+		return PLAYER_CARRY_BOTTOM_OFFSET
+	end
+
 	if feedable:IsA("BasePart") then
 		return feedable.Size.Y * 0.5
 	end
@@ -313,7 +396,69 @@ function GrabService:ClearNoCollisionConstraints(constraints: { NoCollisionConst
 	end
 end
 
+function GrabService:DisableHeldCharacterControl(feedable: Instance, isPlayerCharacter: boolean): any?
+	if not isPlayerCharacter or not feedable:IsA("Model") then
+		return nil
+	end
+
+	local humanoid = feedable:FindFirstChildOfClass("Humanoid")
+	if humanoid == nil then
+		return nil
+	end
+
+	local state = {
+		humanoid = humanoid,
+		walkSpeed = humanoid.WalkSpeed,
+		jumpPower = humanoid.JumpPower,
+		jumpHeight = humanoid.JumpHeight,
+		autoRotate = humanoid.AutoRotate,
+	}
+
+	humanoid.WalkSpeed = HELD_PLAYER_WALK_SPEED
+	humanoid.JumpPower = HELD_PLAYER_JUMP_POWER
+	humanoid.JumpHeight = HELD_PLAYER_JUMP_HEIGHT
+	humanoid.AutoRotate = false
+
+	return state
+end
+
+function GrabService:RestoreHeldCharacterControl(state)
+	if typeof(state) ~= "table" then
+		return
+	end
+
+	local humanoid = state.humanoid
+	if typeof(humanoid) ~= "Instance" or not humanoid:IsA("Humanoid") or humanoid.Parent == nil then
+		return
+	end
+
+	if typeof(state.walkSpeed) == "number" then
+		humanoid.WalkSpeed = state.walkSpeed
+	end
+
+	if typeof(state.jumpPower) == "number" then
+		humanoid.JumpPower = state.jumpPower
+	end
+
+	if typeof(state.jumpHeight) == "number" then
+		humanoid.JumpHeight = state.jumpHeight
+	end
+
+	if typeof(state.autoRotate) == "boolean" then
+		humanoid.AutoRotate = state.autoRotate
+	end
+end
+
 function GrabService:RestoreFeedablePhysics(feedable: Instance)
+	local targetPlayer = if feedable:IsA("Model") then Players:GetPlayerFromCharacter(feedable) else nil
+	if targetPlayer ~= nil then
+		local rootPart = self:GetCharacterRootPart(feedable)
+		if rootPart ~= nil then
+			rootPart.CanCollide = false
+		end
+		return
+	end
+
 	local feedableService = self.Context.services.FeedableService
 	local parts = feedableService:GetBaseParts(feedable)
 
@@ -363,6 +508,11 @@ function GrabService:GetHumanoid(player): Humanoid?
 end
 
 function GrabService:GetWeightFromFeedable(feedable: Instance): number
+	local targetPlayer = if feedable:IsA("Model") then Players:GetPlayerFromCharacter(feedable) else nil
+	if targetPlayer ~= nil then
+		return PLAYER_GRAB_WEIGHT
+	end
+
 	local weight = feedable:GetAttribute(self.Constants.ATTRIBUTES.Weight)
 	if typeof(weight) == "number" then
 		return math.max(0, weight)
@@ -483,6 +633,9 @@ function GrabService:DetachHeldEntry(held, restoreCollisionNow: boolean?)
 		holdWeld:Destroy()
 	end
 
+	self:RestoreHeldCharacterControl(held.heldCharacterControlState)
+	held.heldCharacterControlState = nil
+
 	if restoreCollisionNow and typeof(held.feedable) == "Instance" and held.feedable.Parent ~= nil then
 		self:RestoreFeedablePhysics(held.feedable)
 	end
@@ -543,7 +696,36 @@ function GrabService:ApplyThrowVelocity(player, held, direction)
 	local throwMultiplier =
 		math.clamp(1 - (effectiveWeight * THROW_WEIGHT_PENALTY_PER_UNIT), MIN_THROW_SPEED_MULTIPLIER, 1)
 	speed *= throwMultiplier
+	local thrownPlayer = if held.isPlayerCharacter == true
+			and typeof(held.feedable) == "Instance"
+			and held.feedable:IsA("Model")
+		then Players:GetPlayerFromCharacter(held.feedable)
+		else nil
+
+	if thrownPlayer ~= nil then
+		pcall(function()
+			rootPart:SetNetworkOwner(nil)
+		end)
+	end
+
 	rootPart.AssemblyLinearVelocity = (throwDirection * speed) + Vector3.new(0, THROW_UPWARD_SPEED, 0)
+
+	local thrownFeedable = held.feedable
+	if thrownPlayer ~= nil then
+		task.delay(PLAYER_THROW_OWNERSHIP_RESTORE_DELAY, function()
+			if
+				typeof(thrownFeedable) == "Instance"
+				and thrownFeedable.Parent ~= nil
+				and not self:IsFeedableHeld(thrownFeedable)
+				and Players:GetPlayerFromCharacter(thrownFeedable) == thrownPlayer
+			then
+				pcall(function()
+					rootPart:SetNetworkOwner(thrownPlayer)
+				end)
+			end
+		end)
+		return
+	end
 
 	pcall(function()
 		rootPart:SetNetworkOwner(nil)

@@ -130,13 +130,13 @@ function InputController:HandlePrimaryAction(instance: Instance?)
 		return
 	end
 
-	local feedable = self:FindFeedable(instance)
-	if feedable == nil then
+	local grabbable = self:FindGrabbable(instance)
+	if grabbable == nil then
 		self:RequestThrow()
 		return
 	end
 
-	self.Context.controllers.GrabController:RequestGrab(feedable)
+	self.Context.controllers.GrabController:RequestGrab(grabbable)
 	self:QueueMarkerRefresh()
 end
 
@@ -157,13 +157,17 @@ function InputController:QueueMarkerRefresh()
 	end
 end
 
-function InputController:FindFeedable(instance: Instance): Instance?
+function InputController:FindGrabbable(instance: Instance): Instance?
 	local attributes = self.Constants.ATTRIBUTES
 	local current: Instance? = instance
 	local candidate: Instance? = nil
 
 	while current ~= nil and current ~= Workspace do
 		if current:GetAttribute(attributes.Feedable) == true then
+			candidate = current
+		end
+
+		if current:IsA("Model") and current:FindFirstChild("HumanoidRootPart") ~= nil then
 			candidate = current
 		end
 

@@ -12,6 +12,11 @@ local CHEW_IDLE_TIMEOUT = 4
 local CHEW_CLOSE_TIME = 0.12
 local CHEW_OPEN_TIME = 0.16
 local CHEW_PAUSE_TIME = 0.04
+local PLAYER_CHEW_DURATION = 2
+local PLAYER_REEAT_COOLDOWN = 1
+local PLAYER_SPIT_SPEED = 300
+local PLAYER_SPIT_UPWARD_SPEED = 70
+local PLAYER_SPIT_NO_COLLISION_GRACE = 0.35
 local MOUTH_MODEL_NAME = "MouthModel"
 local CHEW_SOUND_NAME = "ChewingSound"
 local CHEW_SFX_NAME = "MouthChew"
@@ -22,6 +27,8 @@ function MouthService:Init(context)
 	self.AudioConfig = require(context.shared.AudioConfig)
 	self.LastEatTime = 0
 	self.IsChewing = false
+	self.PlayersBeingChewed = {}
+	self.PlayerEatCooldownUntil = {}
 end
 
 function MouthService:Start()
@@ -50,6 +57,12 @@ function MouthService:GetEatZone(): BasePart?
 end
 
 function MouthService:TryEat(hit: BasePart)
+	local player = self:GetPlayerFromHit(hit)
+	if player ~= nil then
+		self:TryEatPlayer(player)
+		return
+	end
+
 	local feedableService = self.Context.services.FeedableService
 	local feedable = feedableService:FindFeedableFromInstance(hit)
 	if feedable == nil then
@@ -64,11 +77,11 @@ function MouthService:TryEat(hit: BasePart)
 	self:MarkConsumed(feedable)
 	self:StartChewing()
 
-	local player = self:GetFeeder(feedable, hit.Position)
+	local feeder = self:GetFeeder(feedable, hit.Position)
 	local reward = 0
-	if player ~= nil then
-		reward = self.Context.services.EconomyService:AwardFeedReward(player, feedable)
-		self.Context.services.FeedbackService:Play(player, "Reward", {
+	if feeder ~= nil then
+		reward = self.Context.services.EconomyService:AwardFeedReward(feeder, feedable)
+		self.Context.services.FeedbackService:Play(feeder, "Reward", {
 			amount = reward,
 			tier = feedable:GetAttribute(attributes.Tier),
 		})
@@ -85,6 +98,169 @@ function MouthService:TryEat(hit: BasePart)
 			feedable:Destroy()
 		end
 	end)
+end
+
+function MouthService:GetPlayerFromHit(hit: BasePart): Player?
+	local character = hit:FindFirstAncestorOfClass("Model")
+	if character == nil then
+		return nil
+	end
+
+	local player = Players:GetPlayerFromCharacter(character)
+	if player ~= nil then
+		return player
+	end
+
+	return nil
+end
+
+function MouthService:TryEatPlayer(player: Player)
+	local now = os.clock()
+	local cooldownUntil = self.PlayerEatCooldownUntil[player]
+	if typeof(cooldownUntil) == "number" and now < cooldownUntil then
+		return
+	end
+
+	if self.PlayersBeingChewed[player] == true then
+		return
+	end
+
+	local character = player.Character
+	local humanoidRootPart = if character ~= nil then character:FindFirstChild("HumanoidRootPart") else nil
+	local humanoid = if character ~= nil then character:FindFirstChildOfClass("Humanoid") else nil
+	if humanoidRootPart == nil or not humanoidRootPart:IsA("BasePart") or humanoid == nil or humanoid.Health <= 0 then
+		return
+	end
+
+	local eatZone = self:GetEatZone()
+	local chewCenter = if eatZone ~= nil then eatZone.Position else humanoidRootPart.Position
+	local spitDirection = self:GetSpitDirection(humanoidRootPart.Position, chewCenter, eatZone)
+	local noCollisionConstraints = self:CreateMouthNoCollisionConstraints(character)
+
+	self.PlayersBeingChewed[player] = true
+	self.PlayerEatCooldownUntil[player] = now + PLAYER_CHEW_DURATION + PLAYER_REEAT_COOLDOWN
+	self.Context.services.GrabService:RequestRelease(player)
+	self:StartChewing()
+
+	humanoidRootPart.CFrame = CFrame.new(chewCenter)
+	humanoidRootPart.AssemblyLinearVelocity = Vector3.zero
+	humanoidRootPart.AssemblyAngularVelocity = Vector3.zero
+	humanoidRootPart.Anchored = true
+
+	task.delay(PLAYER_CHEW_DURATION, function()
+		self.PlayersBeingChewed[player] = nil
+
+		if humanoidRootPart.Parent ~= nil then
+			humanoidRootPart.Anchored = false
+		end
+
+		local currentCharacter = player.Character
+		if currentCharacter ~= character then
+			return
+		end
+
+		local currentRootPart = if currentCharacter ~= nil
+			then currentCharacter:FindFirstChild("HumanoidRootPart")
+			else nil
+		local currentHumanoid = if currentCharacter ~= nil
+			then currentCharacter:FindFirstChildOfClass("Humanoid")
+			else nil
+		if
+			currentRootPart == nil
+			or not currentRootPart:IsA("BasePart")
+			or currentHumanoid == nil
+			or currentHumanoid.Health <= 0
+		then
+			return
+		end
+
+		currentRootPart.Anchored = false
+		currentRootPart.AssemblyLinearVelocity = (spitDirection * PLAYER_SPIT_SPEED)
+			+ Vector3.new(0, PLAYER_SPIT_UPWARD_SPEED, 0)
+	end)
+
+	task.delay(PLAYER_CHEW_DURATION + PLAYER_REEAT_COOLDOWN + PLAYER_SPIT_NO_COLLISION_GRACE, function()
+		self:ClearNoCollisionConstraints(noCollisionConstraints)
+	end)
+end
+
+function MouthService:GetSpitDirection(entryPosition: Vector3, chewCenter: Vector3, eatZone: BasePart?): Vector3
+	local offset = entryPosition - chewCenter
+	if offset.Magnitude > 0.05 then
+		return offset.Unit
+	end
+
+	if eatZone ~= nil then
+		local fallbackDirection = -eatZone.CFrame.LookVector
+		if fallbackDirection.Magnitude > 0.05 then
+			return fallbackDirection.Unit
+		end
+	end
+
+	return Vector3.new(0, 0, -1)
+end
+
+function MouthService:GetCharacterBaseParts(character: Model): { BasePart }
+	local parts = {}
+	for _, descendant in ipairs(character:GetDescendants()) do
+		if descendant:IsA("BasePart") then
+			table.insert(parts, descendant)
+		end
+	end
+
+	return parts
+end
+
+function MouthService:GetMouthCollisionParts(): { BasePart }
+	local parts = {}
+
+	local mouthModel = self:GetMouthModel()
+	if mouthModel ~= nil then
+		for _, descendant in ipairs(mouthModel:GetDescendants()) do
+			if descendant:IsA("BasePart") then
+				table.insert(parts, descendant)
+			end
+		end
+	end
+
+	local eatZone = self:GetEatZone()
+	if eatZone ~= nil then
+		table.insert(parts, eatZone)
+	end
+
+	return parts
+end
+
+function MouthService:CreateMouthNoCollisionConstraints(character: Model): { NoCollisionConstraint }
+	local characterParts = self:GetCharacterBaseParts(character)
+	local mouthParts = self:GetMouthCollisionParts()
+	local constraints = {}
+
+	if #characterParts == 0 or #mouthParts == 0 then
+		return constraints
+	end
+
+	for _, characterPart in ipairs(characterParts) do
+		for _, mouthPart in ipairs(mouthParts) do
+			if characterPart ~= mouthPart then
+				local noCollision = Instance.new("NoCollisionConstraint")
+				noCollision.Part0 = characterPart
+				noCollision.Part1 = mouthPart
+				noCollision.Parent = characterPart
+				table.insert(constraints, noCollision)
+			end
+		end
+	end
+
+	return constraints
+end
+
+function MouthService:ClearNoCollisionConstraints(constraints: { NoCollisionConstraint })
+	for _, constraint in ipairs(constraints) do
+		if constraint.Parent ~= nil then
+			constraint:Destroy()
+		end
+	end
 end
 
 function MouthService:StartChewing()
@@ -142,7 +318,7 @@ function MouthService:GetMouthModel(): Model?
 	return nil
 end
 
-function MouthService:CaptureMouthCFrames(mouthModel: Model): {[BasePart]: CFrame}
+function MouthService:CaptureMouthCFrames(mouthModel: Model): { [BasePart]: CFrame }
 	local restCFrames = {}
 	for _, descendant in ipairs(mouthModel:GetDescendants()) do
 		if descendant:IsA("BasePart") then
@@ -213,7 +389,7 @@ function MouthService:GetChewOffset(partName: string): Vector3
 	return Vector3.zero
 end
 
-function MouthService:TweenMouth(restCFrames: {[BasePart]: CFrame}, closed: boolean, duration: number)
+function MouthService:TweenMouth(restCFrames: { [BasePart]: CFrame }, closed: boolean, duration: number)
 	local tweenInfo = TweenInfo.new(duration, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut)
 	for part, restCFrame in pairs(restCFrames) do
 		if part.Parent == nil then

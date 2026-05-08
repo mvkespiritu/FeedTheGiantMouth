@@ -136,62 +136,71 @@ function UIController:BuildStruggleUI()
 		return
 	end
 
-	local container = Instance.new("Frame")
-	container.Name = "StruggleMeterContainer"
-	container.AnchorPoint = Vector2.new(0.5, 0.5)
-	container.Position = UDim2.new(0.75, 0, 0.5, 0)
-	container.Size = UDim2.fromOffset(138, 138)
-	container.BackgroundColor3 = Color3.fromRGB(24, 30, 39)
-	container.BackgroundTransparency = 0.35
-	container.BorderSizePixel = 0
-	container.ClipsDescendants = true
+	local container = self.MainHUD:FindFirstChild("StruggleMeterContainer")
+	if container == nil or not container:IsA("GuiObject") then
+		warn("StruggleMeterContainer is missing from MainHUD")
+		return
+	end
+
+	local fill = container:FindFirstChild("MeterFill")
+	local fillGradient = if fill ~= nil then fill:FindFirstChild("MeterFillGradient") else nil
+	local tapLabel = container:FindFirstChild("TapLabel")
+
+	if fill == nil or not fill:IsA("ImageLabel") then
+		warn("StruggleMeterContainer.MeterFill must be an ImageLabel")
+		return
+	end
+
+	if fillGradient == nil or not fillGradient:IsA("UIGradient") then
+		warn("StruggleMeterContainer.MeterFill.MeterFillGradient must be a UIGradient")
+		return
+	end
+
+	if tapLabel == nil or not tapLabel:IsA("TextLabel") then
+		warn("StruggleMeterContainer.TapLabel must be a TextLabel")
+		return
+	end
+
 	container.Visible = false
-	container.Parent = self.MainHUD
-	local containerAspect = Instance.new("UIAspectRatioConstraint")
-	containerAspect.AspectRatio = 1
-	containerAspect.Parent = container
-	local containerCorner = Instance.new("UICorner")
-	containerCorner.CornerRadius = UDim.new(1, 0)
-	containerCorner.Parent = container
-	local containerStroke = Instance.new("UIStroke")
-	containerStroke.Color = Color3.fromRGB(255, 255, 255)
-	containerStroke.Thickness = 2
-	containerStroke.Transparency = 0.25
-	containerStroke.Parent = container
-
-	local fill = Instance.new("Frame")
-	fill.Name = "MeterFill"
-	fill.AnchorPoint = Vector2.new(0, 0)
-	fill.Position = UDim2.fromScale(0, 1)
-	fill.Size = UDim2.fromScale(1, 1)
-	fill.BackgroundColor3 = Color3.fromRGB(255, 130, 76)
-	fill.BorderSizePixel = 0
-	fill.ZIndex = 2
-	fill.Parent = container
-	local fillGradient = Instance.new("UIGradient")
-	fillGradient.Color = ColorSequence.new({
-		ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 88, 88)),
-		ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 220, 110)),
-	})
-	fillGradient.Rotation = 90
-	fillGradient.Parent = fill
-
-	local tapLabel = Instance.new("TextLabel")
-	tapLabel.Name = "TapLabel"
-	tapLabel.BackgroundTransparency = 1
-	tapLabel.Size = UDim2.fromScale(1, 1)
-	tapLabel.Font = Enum.Font.GothamBlack
-	tapLabel.Text = "Tap!"
-	tapLabel.TextSize = 34
-	tapLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-	tapLabel.TextStrokeColor3 = Color3.fromRGB(13, 15, 20)
-	tapLabel.TextStrokeTransparency = 0.35
-	tapLabel.ZIndex = 3
-	tapLabel.Parent = container
 
 	self.StruggleMeterContainer = container
 	self.StruggleMeterFill = fill
+	self.StruggleMeterFillGradient = fillGradient
 	self.StruggleTapLabel = tapLabel
+	self:UpdateStruggleFill(0)
+end
+
+function UIController:UpdateStruggleFill(progress: number)
+	if self.StruggleMeterFillGradient == nil then
+		return
+	end
+
+	if progress <= 0 then
+		self.StruggleMeterFillGradient.Transparency = NumberSequence.new(1)
+		return
+	end
+
+	if progress >= 1 then
+		self.StruggleMeterFillGradient.Transparency = NumberSequence.new(0)
+		return
+	end
+
+	local edge = 1 - progress
+	local nextEdge = math.min(edge + 0.001, 1)
+	if nextEdge >= 1 then
+		self.StruggleMeterFillGradient.Transparency = NumberSequence.new({
+			NumberSequenceKeypoint.new(0, 1),
+			NumberSequenceKeypoint.new(edge, 1),
+			NumberSequenceKeypoint.new(1, 0),
+		})
+	else
+		self.StruggleMeterFillGradient.Transparency = NumberSequence.new({
+			NumberSequenceKeypoint.new(0, 1),
+			NumberSequenceKeypoint.new(edge, 1),
+			NumberSequenceKeypoint.new(nextEdge, 0),
+			NumberSequenceKeypoint.new(1, 0),
+		})
+	end
 end
 
 function UIController:BindStruggleCharacter(character: Model)
@@ -222,13 +231,17 @@ function UIController:BindStruggleCharacter(character: Model)
 end
 
 function UIController:UpdateStruggleUI(character: Model?)
-	if self.StruggleMeterContainer == nil or self.StruggleMeterFill == nil or self.StruggleTapLabel == nil then
+	if
+		self.StruggleMeterContainer == nil
+		or self.StruggleMeterFillGradient == nil
+		or self.StruggleTapLabel == nil
+	then
 		return
 	end
 
 	if character == nil then
 		self.StruggleMeterContainer.Visible = false
-		self.StruggleMeterFill.Position = UDim2.fromScale(0, 1)
+		self:UpdateStruggleFill(0)
 		return
 	end
 
@@ -236,7 +249,7 @@ function UIController:UpdateStruggleUI(character: Model?)
 	local rawProgress = character:GetAttribute(self.Constants.ATTRIBUTES.GrabStruggleProgress)
 	local progress = if typeof(rawProgress) == "number" then math.clamp(rawProgress, 0, 1) else 0
 	self.StruggleMeterContainer.Visible = isGrabbed
-	self.StruggleMeterFill.Position = UDim2.fromScale(0, 1 - progress)
+	self:UpdateStruggleFill(progress)
 	self.StruggleTapLabel.Text = if isGrabbed then "Tap!" else ""
 end
 

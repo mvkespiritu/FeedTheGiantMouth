@@ -1,6 +1,7 @@
 --!strict
 
 local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
 
 local UIController = {}
 UIController.Name = "UIController"
@@ -15,6 +16,7 @@ function UIController:Init(context)
 	self.CurrentPlayerData = nil
 	self.UpgradeLevelLabelsById = {}
 	self.StruggleConnections = {}
+	self.IsStruggleUIVisible = false
 end
 
 function UIController:Start()
@@ -145,6 +147,7 @@ function UIController:BuildStruggleUI()
 	local fill = container:FindFirstChild("MeterFill")
 	local fillGradient = if fill ~= nil then fill:FindFirstChild("MeterFillGradient") else nil
 	local tapLabel = container:FindFirstChild("TapLabel")
+	local pulseScale = container:FindFirstChild("PulseScale")
 
 	if fill == nil or not fill:IsA("ImageLabel") then
 		warn("StruggleMeterContainer.MeterFill must be an ImageLabel")
@@ -161,13 +164,71 @@ function UIController:BuildStruggleUI()
 		return
 	end
 
+	if pulseScale == nil then
+		pulseScale = Instance.new("UIScale")
+		pulseScale.Name = "PulseScale"
+		pulseScale.Parent = container
+	end
+
+	if not pulseScale:IsA("UIScale") then
+		warn("StruggleMeterContainer.PulseScale must be a UIScale")
+		return
+	end
+
 	container.Visible = false
+	tapLabel.Rotation = 0
+	pulseScale.Scale = 1
 
 	self.StruggleMeterContainer = container
 	self.StruggleMeterFill = fill
 	self.StruggleMeterFillGradient = fillGradient
+	self.StrugglePulseScale = pulseScale
 	self.StruggleTapLabel = tapLabel
 	self:UpdateStruggleFill(0)
+end
+
+function UIController:StartStruggleAnimations()
+	if self.StruggleTapLabel == nil or self.StrugglePulseScale == nil then
+		return
+	end
+
+	self:StopStruggleAnimations()
+
+	self.StruggleTapLabel.Rotation = -7
+	self.StruggleTapWiggleTween = TweenService:Create(
+		self.StruggleTapLabel,
+		TweenInfo.new(0.11, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true),
+		{ Rotation = 7 }
+	)
+	self.StruggleTapWiggleTween:Play()
+
+	self.StrugglePulseScale.Scale = 1
+	self.StrugglePulseTween = TweenService:Create(
+		self.StrugglePulseScale,
+		TweenInfo.new(0.22, Enum.EasingStyle.Quad, Enum.EasingDirection.Out, -1, true),
+		{ Scale = 1.08 }
+	)
+	self.StrugglePulseTween:Play()
+end
+
+function UIController:StopStruggleAnimations()
+	if self.StruggleTapWiggleTween ~= nil then
+		self.StruggleTapWiggleTween:Cancel()
+		self.StruggleTapWiggleTween = nil
+	end
+
+	if self.StrugglePulseTween ~= nil then
+		self.StrugglePulseTween:Cancel()
+		self.StrugglePulseTween = nil
+	end
+
+	if self.StruggleTapLabel ~= nil then
+		self.StruggleTapLabel.Rotation = 0
+	end
+
+	if self.StrugglePulseScale ~= nil then
+		self.StrugglePulseScale.Scale = 1
+	end
 end
 
 function UIController:UpdateStruggleFill(progress: number)
@@ -241,6 +302,10 @@ function UIController:UpdateStruggleUI(character: Model?)
 
 	if character == nil then
 		self.StruggleMeterContainer.Visible = false
+		if self.IsStruggleUIVisible then
+			self:StopStruggleAnimations()
+			self.IsStruggleUIVisible = false
+		end
 		self:UpdateStruggleFill(0)
 		return
 	end
@@ -249,7 +314,14 @@ function UIController:UpdateStruggleUI(character: Model?)
 	local rawProgress = character:GetAttribute(self.Constants.ATTRIBUTES.GrabStruggleProgress)
 	local progress = if typeof(rawProgress) == "number" then math.clamp(rawProgress, 0, 1) else 0
 	self.StruggleMeterContainer.Visible = isGrabbed
-	self:UpdateStruggleFill(progress)
+	if isGrabbed and not self.IsStruggleUIVisible then
+		self:StartStruggleAnimations()
+		self.IsStruggleUIVisible = true
+	elseif not isGrabbed and self.IsStruggleUIVisible then
+		self:StopStruggleAnimations()
+		self.IsStruggleUIVisible = false
+	end
+	self:UpdateStruggleFill(if isGrabbed then progress else 0)
 	self.StruggleTapLabel.Text = if isGrabbed then "Tap!" else ""
 end
 

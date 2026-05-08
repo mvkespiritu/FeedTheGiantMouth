@@ -149,6 +149,12 @@ function MouthService:TryEatPlayer(player: Player)
 	self.PlayerEatCooldownUntil[player] = now + PLAYER_CHEW_DURATION + PLAYER_REEAT_COOLDOWN
 	self.Context.services.GrabService:RequestRelease(player)
 	self:StartChewing()
+	self.Context.services.FeedbackService:Play(player, "MouthPlayerSequence", {
+		chewDuration = PLAYER_CHEW_DURATION,
+		spitDuration = PLAYER_RAGDOLL_DURATION,
+		mouthPosition = chewCenter,
+		spitDirection = spitDirection,
+	})
 
 	humanoidRootPart.CFrame = CFrame.new(chewCenter)
 	humanoidRootPart.AssemblyLinearVelocity = Vector3.zero

@@ -27,13 +27,7 @@ function InputController:Start()
 			return
 		end
 
-		if input.KeyCode == Enum.KeyCode.E then
-			if self:IsLocalPlayerGrabbed() then
-				self:HandleStruggleAction()
-			else
-				self:HandlePrimaryAction(mouse.Target)
-			end
-		elseif input.UserInputType == Enum.UserInputType.MouseButton1 then
+		if input.UserInputType == Enum.UserInputType.MouseButton1 then
 			if self:IsLocalPlayerGrabbed() then
 				self:HandleStruggleAction()
 			else

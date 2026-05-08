@@ -14,9 +14,10 @@ local CHEW_OPEN_TIME = 0.16
 local CHEW_PAUSE_TIME = 0.04
 local PLAYER_CHEW_DURATION = 2
 local PLAYER_REEAT_COOLDOWN = 1
-local PLAYER_SPIT_SPEED = 300
+local PLAYER_SPIT_SPEED = 100
 local PLAYER_SPIT_UPWARD_SPEED = 70
 local PLAYER_SPIT_NO_COLLISION_GRACE = 0.35
+local PLAYER_RAGDOLL_DURATION = 1.8
 local MOUTH_MODEL_NAME = "MouthModel"
 local CHEW_SOUND_NAME = "ChewingSound"
 local CHEW_SFX_NAME = "MouthChew"
@@ -29,6 +30,7 @@ function MouthService:Init(context)
 	self.IsChewing = false
 	self.PlayersBeingChewed = {}
 	self.PlayerEatCooldownUntil = {}
+	self.PlayerRagdollDataByPlayer = {}
 end
 
 function MouthService:Start()
@@ -41,6 +43,12 @@ function MouthService:Start()
 	eatZone.CanTouch = true
 	eatZone.Touched:Connect(function(hit)
 		self:TryEat(hit)
+	end)
+
+	Players.PlayerRemoving:Connect(function(player)
+		self.PlayersBeingChewed[player] = nil
+		self.PlayerEatCooldownUntil[player] = nil
+		self:DeactivatePlayerRagdoll(player)
 	end)
 end
 
@@ -174,9 +182,14 @@ function MouthService:TryEatPlayer(player: Player)
 			return
 		end
 
+		self:ActivatePlayerRagdoll(player, currentCharacter, currentHumanoid)
 		currentRootPart.Anchored = false
 		currentRootPart.AssemblyLinearVelocity = (spitDirection * PLAYER_SPIT_SPEED)
 			+ Vector3.new(0, PLAYER_SPIT_UPWARD_SPEED, 0)
+
+		task.delay(PLAYER_RAGDOLL_DURATION, function()
+			self:DeactivatePlayerRagdoll(player, currentCharacter)
+		end)
 	end)
 
 	task.delay(PLAYER_CHEW_DURATION + PLAYER_REEAT_COOLDOWN + PLAYER_SPIT_NO_COLLISION_GRACE, function()
@@ -260,6 +273,106 @@ function MouthService:ClearNoCollisionConstraints(constraints: { NoCollisionCons
 		if constraint.Parent ~= nil then
 			constraint:Destroy()
 		end
+	end
+end
+
+function MouthService:ActivatePlayerRagdoll(player: Player, character: Model, humanoid: Humanoid)
+	self:DeactivatePlayerRagdoll(player)
+
+	local ragdollData = {
+		character = character,
+		humanoid = humanoid,
+		motors = {},
+		createdInstances = {},
+		requiresNeck = humanoid.RequiresNeck,
+		autoRotate = humanoid.AutoRotate,
+	}
+	self.PlayerRagdollDataByPlayer[player] = ragdollData
+
+	humanoid.RequiresNeck = false
+	humanoid.AutoRotate = false
+	humanoid.PlatformStand = true
+	humanoid:ChangeState(Enum.HumanoidStateType.Physics)
+
+	for _, descendant in ipairs(character:GetDescendants()) do
+		if descendant:IsA("Motor6D") then
+			local part0 = descendant.Part0
+			local part1 = descendant.Part1
+			if part0 == nil or part1 == nil then
+				continue
+			end
+
+			table.insert(ragdollData.motors, {
+				motor = descendant,
+				enabled = descendant.Enabled,
+			})
+
+			local attachment0 = Instance.new("Attachment")
+			attachment0.Name = "MouthRagdollA0"
+			attachment0.CFrame = descendant.C0
+			attachment0.Parent = part0
+
+			local attachment1 = Instance.new("Attachment")
+			attachment1.Name = "MouthRagdollA1"
+			attachment1.CFrame = descendant.C1
+			attachment1.Parent = part1
+
+			local ballSocket = Instance.new("BallSocketConstraint")
+			ballSocket.Name = "MouthRagdollJoint"
+			ballSocket.Attachment0 = attachment0
+			ballSocket.Attachment1 = attachment1
+			ballSocket.LimitsEnabled = true
+			ballSocket.TwistLimitsEnabled = true
+			ballSocket.Parent = part0
+
+			table.insert(ragdollData.createdInstances, ballSocket)
+			table.insert(ragdollData.createdInstances, attachment0)
+			table.insert(ragdollData.createdInstances, attachment1)
+
+			descendant.Enabled = false
+		end
+	end
+end
+
+function MouthService:DeactivatePlayerRagdoll(player: Player, expectedCharacter: Model?)
+	local ragdollData = self.PlayerRagdollDataByPlayer[player]
+	if ragdollData == nil then
+		return
+	end
+
+	if expectedCharacter ~= nil and ragdollData.character ~= expectedCharacter then
+		if ragdollData.character == nil or ragdollData.character.Parent == nil then
+			self.PlayerRagdollDataByPlayer[player] = nil
+		end
+		return
+	end
+
+	self.PlayerRagdollDataByPlayer[player] = nil
+
+	for _, createdInstance in ipairs(ragdollData.createdInstances) do
+		if typeof(createdInstance) == "Instance" and createdInstance.Parent ~= nil then
+			createdInstance:Destroy()
+		end
+	end
+
+	for _, motorEntry in ipairs(ragdollData.motors) do
+		local motor = motorEntry.motor
+		if typeof(motor) == "Instance" and motor:IsA("Motor6D") and motor.Parent ~= nil then
+			motor.Enabled = motorEntry.enabled
+		end
+	end
+
+	local humanoid = ragdollData.humanoid
+	if
+		typeof(humanoid) == "Instance"
+		and humanoid:IsA("Humanoid")
+		and humanoid.Parent ~= nil
+		and humanoid.Health > 0
+	then
+		humanoid.PlatformStand = false
+		humanoid.AutoRotate = ragdollData.autoRotate
+		humanoid.RequiresNeck = ragdollData.requiresNeck
+		humanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
 	end
 end
 

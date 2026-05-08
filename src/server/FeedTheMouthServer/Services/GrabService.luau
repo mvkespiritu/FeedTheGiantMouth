@@ -71,6 +71,10 @@ function GrabService:RequestGrab(player, feedable)
 		return
 	end
 
+	if self:IsFeedableHeld(feedable) then
+		return
+	end
+
 	if not feedableService:IsFeedable(feedable) then
 		return
 	end

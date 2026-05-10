@@ -4,6 +4,7 @@ export type UpgradeId = "Strength" | "CarryCapacity" | "ThrowPower" | "ValueMult
 export type ObjectTierId = "Small" | "Medium" | "Large" | "Absurd"
 
 export type PlayerData = {
+	schemaVersion: number,
 	coins: number,
 	upgrades: {
 		Strength: number,

@@ -37,7 +37,7 @@ function UpgradeService:RequestUpgrade(player, upgradeId: string): boolean
 		return false
 	end
 
-	if not playerDataService:TrySpendCoins(player, cost) then
+	if not playerDataService:TryPurchaseUpgrade(player, upgradeId, cost, currentLevel + 1) then
 		self.Context.services.FeedbackService:Play(player, "NotEnoughCoins", {
 			upgradeId = upgradeId,
 			displayName = definition.displayName,
@@ -46,7 +46,6 @@ function UpgradeService:RequestUpgrade(player, upgradeId: string): boolean
 		return false
 	end
 
-	playerDataService:SetUpgradeLevel(player, upgradeId, currentLevel + 1)
 	self.Context.services.FeedbackService:Play(player, "UpgradePurchased", {
 		upgradeId = upgradeId,
 		displayName = definition.displayName,

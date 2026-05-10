@@ -73,9 +73,22 @@
           "$path": "src/server/FeedTheMouthServer/Bootstrap.server.luau"
         },
 
+        "Packages": {
+          "$path": "src/server/FeedTheMouthServer/Packages"
+        },
+
         "Services": {
           "$path": "src/server/FeedTheMouthServer/Services"
         }
+      }
+    },
+
+    "ServerStorage": {
+      "$ignoreUnknownInstances": true,
+
+      "SaveInStudio": {
+        "$className": "BoolValue",
+        "Value": true
       }
     },
 

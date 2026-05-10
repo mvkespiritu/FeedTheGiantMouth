@@ -42,6 +42,11 @@ function FeedbackController:HandleFeedback(feedbackName: string, payload)
 		if uiController ~= nil then
 			uiController:ShowStatusMessage(`{payload.displayName or "Upgrade"} level {payload.level or "?"}`)
 		end
+	elseif feedbackName == "StatusMessage" then
+		local uiController = self.Context.controllers.UIController
+		if uiController ~= nil then
+			uiController:ShowStatusMessage(payload.message or "")
+		end
 	end
 end
 

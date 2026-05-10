@@ -47,6 +47,7 @@ local function createDefaultData(upgradeConfig)
 		schemaVersion = SCHEMA_VERSION,
 		coins = 0,
 		upgrades = upgrades,
+		discoveredItems = {},
 	}
 end
 
@@ -195,6 +196,18 @@ function PlayerDataService:NormalizeData(data)
 		end
 	end
 
+	if typeof(data.discoveredItems) ~= "table" then
+		data.discoveredItems = {}
+		changed = true
+	else
+		for itemId, discovered in pairs(data.discoveredItems) do
+			if typeof(itemId) ~= "string" or itemId == "" or discovered ~= true then
+				data.discoveredItems[itemId] = nil
+				changed = true
+			end
+		end
+	end
+
 	return data, changed
 end
 
@@ -210,6 +223,26 @@ end
 function PlayerDataService:GetUpgradeLevel(player, upgradeId: string): number
 	local data = self:GetData(player)
 	return data.upgrades[upgradeId] or 1
+end
+
+function PlayerDataService:TryDiscoverItem(player, itemId: string): boolean
+	if itemId == "" then
+		return false
+	end
+
+	local data = self:GetData(player)
+	if typeof(data.discoveredItems) ~= "table" then
+		data.discoveredItems = {}
+	end
+
+	if data.discoveredItems[itemId] == true then
+		return false
+	end
+
+	data.discoveredItems[itemId] = true
+	self:CommitData(player)
+	self:PushData(player)
+	return true
 end
 
 function PlayerDataService:AddCoins(player, amount: number)

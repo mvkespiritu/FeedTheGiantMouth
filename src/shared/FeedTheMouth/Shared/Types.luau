@@ -12,6 +12,7 @@ export type PlayerData = {
 		ThrowPower: number,
 		ValueMultiplier: number,
 	},
+	discoveredItems: {[string]: boolean},
 }
 
 export type BootstrapContext = {

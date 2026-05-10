@@ -173,6 +173,18 @@ function GrabService:RequestGrab(player, feedable)
 		target:SetAttribute(self.Constants.ATTRIBUTES.LastHolderUserId, player.UserId)
 	end
 	self.Context.services.FeedbackService:Play(player, "GrabObject", {})
+
+	if not isPlayerCharacter then
+		local feedableService = self.Context.services.FeedableService
+		local itemId = feedableService:GetFeedableItemId(target)
+		if self.Context.services.PlayerDataService:TryDiscoverItem(player, itemId) then
+			self.Context.services.FeedbackService:Play(player, "NewItemDiscovered", {
+				itemName = feedableService:GetFeedableDisplayName(target),
+				feedable = target,
+				position = rootPart.Position,
+			})
+		end
+	end
 end
 
 function GrabService:ResolveGrabbableTarget(player, instance: Instance): (Instance?, boolean)

@@ -30,6 +30,12 @@ AudioConfig.SFX = table.freeze({
 		pitchMin = 0.95,
 		pitchMax = 1.05,
 	},
+	NewItemDiscovered = {
+		soundId = "rbxassetid://104644728934074",
+		volume = 0.85,
+		pitchMin = 0.98,
+		pitchMax = 1.04,
+	},
 	ThrowObject = {
 		soundId = "rbxassetid://130418119356313",
 		volume = 0.7,
@@ -80,6 +86,7 @@ AudioConfig.FeedbackSFX = table.freeze({
 	InvalidUpgrade = "InvalidUpgrade",
 	LockedObject = "LockedObject",
 	MouthEat = "MouthEat",
+	NewItemDiscovered = "NewItemDiscovered",
 	NotEnoughCoins = "NotEnoughCoins",
 	Reward = "Reward",
 	ThrowObject = "ThrowObject",

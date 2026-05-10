@@ -26,6 +26,8 @@ local Constants = {
 		RequiredStrength = "RequiredStrength",
 		Consumed = "Consumed",
 		LastHolderUserId = "LastHolderUserId",
+		ItemId = "ItemId",
+		DisplayName = "DisplayName",
 		IsGrabbed = "IsGrabbed",
 		GrabStruggleProgress = "GrabStruggleProgress",
 	}),

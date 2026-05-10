@@ -95,7 +95,35 @@ function FeedableService:ApplyFeedableAttributes(feedable: Instance, tierName: s
 		attributes.RequiredStrength,
 		feedable:GetAttribute(attributes.RequiredStrength) or tierConfig.requiredStrength
 	)
+	feedable:SetAttribute(attributes.ItemId, self:GetFeedableItemId(feedable))
+	feedable:SetAttribute(attributes.DisplayName, self:GetFeedableDisplayName(feedable))
 	feedable:SetAttribute(attributes.Consumed, false)
+end
+
+function FeedableService:GetFeedableItemId(feedable: Instance): string
+	local rawItemId = feedable:GetAttribute(self.Constants.ATTRIBUTES.ItemId)
+	if typeof(rawItemId) == "string" and rawItemId ~= "" then
+		return rawItemId
+	end
+
+	return self:GetBaseFeedableName(feedable)
+end
+
+function FeedableService:GetFeedableDisplayName(feedable: Instance): string
+	local rawDisplayName = feedable:GetAttribute(self.Constants.ATTRIBUTES.DisplayName)
+	if typeof(rawDisplayName) == "string" and rawDisplayName ~= "" then
+		return rawDisplayName
+	end
+
+	local baseName = self:GetBaseFeedableName(feedable)
+	local displayName = string.gsub(baseName, "_", " ")
+	displayName = string.gsub(displayName, "(%l)(%u)", "%1 %2")
+	return displayName
+end
+
+function FeedableService:GetBaseFeedableName(feedable: Instance): string
+	local baseName = string.gsub(feedable.Name, "_Spawned_%d+$", "")
+	return baseName
 end
 
 function FeedableService:IsFeedable(instance: Instance): boolean

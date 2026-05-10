@@ -6,6 +6,9 @@ local TweenService = game:GetService("TweenService")
 local UIController = {}
 UIController.Name = "UIController"
 
+local NEW_ITEM_POPUP_NAME = "NewItemPopup"
+local NEW_ITEM_POPUP_HOLD_SECONDS = 1.65
+
 function UIController:Init(context)
 	self.Context = context
 	self.Constants = require(context.shared.Constants)
@@ -13,6 +16,7 @@ function UIController:Init(context)
 	self.PlayerDataChanged = context.remotes:WaitForChild("PlayerDataChanged")
 	self.RewardMessageId = 0
 	self.StatusMessageId = 0
+	self.NewItemMessageId = 0
 	self.CurrentPlayerData = nil
 	self.UpgradeLevelLabelsById = {}
 	self.StruggleConnections = {}
@@ -35,6 +39,7 @@ function UIController:Start()
 	self.FeedbackFrame = self.MainHUD:WaitForChild("FeedbackFrame")
 	self.RewardPopupTemplate = self.FeedbackFrame:WaitForChild("RewardPopupTemplate")
 	self.LockMessageLabel = self.FeedbackFrame:WaitForChild("LockMessageLabel")
+	self:BuildNewItemPopup()
 	self:BuildStruggleUI()
 	self:BuildUpgradeLevelLabels()
 
@@ -130,6 +135,146 @@ function UIController:ShowStatusMessage(message: string)
 		if self.StatusMessageId == messageId and self.LockMessageLabel ~= nil then
 			self.LockMessageLabel.Text = ""
 		end
+	end)
+end
+
+function UIController:BuildNewItemPopup()
+	if self.FeedbackFrame == nil then
+		return
+	end
+
+	local popup = self.FeedbackFrame:FindFirstChild(NEW_ITEM_POPUP_NAME)
+	if popup == nil then
+		popup = Instance.new("TextLabel")
+		popup.Name = NEW_ITEM_POPUP_NAME
+		popup.AnchorPoint = Vector2.new(0.5, 0)
+		popup.Position = UDim2.fromScale(0.5, 0.08)
+		popup.Size = UDim2.new(0.72, 0, 0, 76)
+		popup.BackgroundColor3 = Color3.fromRGB(18, 22, 31)
+		popup.BackgroundTransparency = 0.04
+		popup.BorderSizePixel = 0
+		popup.Font = Enum.Font.GothamBlack
+		popup.RichText = true
+		popup.TextColor3 = Color3.fromRGB(255, 255, 255)
+		popup.TextStrokeTransparency = 0.9
+		popup.TextScaled = false
+		popup.TextSize = 24
+		popup.TextWrapped = true
+		popup.LineHeight = 0.92
+		popup.Visible = false
+		popup.ZIndex = 20
+		popup.Parent = self.FeedbackFrame
+
+		local sizeConstraint = Instance.new("UISizeConstraint")
+		sizeConstraint.MinSize = Vector2.new(240, 68)
+		sizeConstraint.MaxSize = Vector2.new(460, 76)
+		sizeConstraint.Parent = popup
+
+		local textConstraint = Instance.new("UITextSizeConstraint")
+		textConstraint.MinTextSize = 14
+		textConstraint.MaxTextSize = 24
+		textConstraint.Parent = popup
+
+		local corner = Instance.new("UICorner")
+		corner.CornerRadius = UDim.new(0, 8)
+		corner.Parent = popup
+
+		local stroke = Instance.new("UIStroke")
+		stroke.Color = Color3.fromRGB(105, 64, 18)
+		stroke.Thickness = 1.5
+		stroke.Transparency = 0.18
+		stroke.Parent = popup
+
+		local padding = Instance.new("UIPadding")
+		padding.PaddingLeft = UDim.new(0, 16)
+		padding.PaddingRight = UDim.new(0, 16)
+		padding.PaddingTop = UDim.new(0, 8)
+		padding.PaddingBottom = UDim.new(0, 8)
+		padding.Parent = popup
+	end
+
+	if popup:IsA("TextLabel") then
+		self.NewItemPopup = popup
+	end
+end
+
+function UIController:EscapeRichText(text: string): string
+	local escaped = string.gsub(text, "&", "&amp;")
+	escaped = string.gsub(escaped, "<", "&lt;")
+	escaped = string.gsub(escaped, ">", "&gt;")
+	return escaped
+end
+
+function UIController:ShowNewItem(itemName: string)
+	self.NewItemMessageId += 1
+	local messageId = self.NewItemMessageId
+
+	if self.NewItemPopup == nil then
+		self:BuildNewItemPopup()
+	end
+
+	local popup = self.NewItemPopup
+	if popup == nil or not popup:IsA("TextLabel") then
+		return
+	end
+
+	local escapedItemName = self:EscapeRichText(itemName)
+	popup.Text = `<font size="20" color="#FFE36A">NEW ITEM!</font>\n<font size="28" color="#FFFFFF">{escapedItemName}</font>`
+	popup.Visible = true
+	popup.TextTransparency = 1
+	popup.BackgroundTransparency = 1
+	popup.Position = UDim2.fromScale(0.5, 0.055)
+
+	local stroke = popup:FindFirstChildOfClass("UIStroke")
+	if stroke ~= nil then
+		stroke.Transparency = 1
+	end
+
+	TweenService:Create(
+		popup,
+		TweenInfo.new(0.18, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
+		{
+			TextTransparency = 0,
+			BackgroundTransparency = 0.04,
+			Position = UDim2.fromScale(0.5, 0.08),
+		}
+	):Play()
+
+	if stroke ~= nil then
+		TweenService:Create(
+			stroke,
+			TweenInfo.new(0.18, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
+			{ Transparency = 0.18 }
+		):Play()
+	end
+
+	task.delay(NEW_ITEM_POPUP_HOLD_SECONDS, function()
+		if self.NewItemMessageId ~= messageId or popup.Parent == nil then
+			return
+		end
+
+		local fadeTween = TweenService:Create(
+			popup,
+			TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.In),
+			{
+				TextTransparency = 1,
+				BackgroundTransparency = 1,
+				Position = UDim2.fromScale(0.5, 0.055),
+			}
+		)
+		fadeTween:Play()
+		if stroke ~= nil then
+			TweenService:Create(
+				stroke,
+				TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.In),
+				{ Transparency = 1 }
+			):Play()
+		end
+		fadeTween.Completed:Connect(function()
+			if self.NewItemMessageId == messageId then
+				popup.Visible = false
+			end
+		end)
 	end)
 end
 

@@ -214,8 +214,18 @@ function RespawnService:SpawnOne(tierName: string, tierFolder: Folder, spawnArea
 	end
 
 	local feedable = template:Clone()
+	local attributes = self.Constants.ATTRIBUTES
+	local templateItemId = template:GetAttribute(attributes.ItemId)
+	local templateDisplayName = template:GetAttribute(attributes.DisplayName)
 	self.SpawnCounter += 1
 	feedable.Name = `{template.Name}_Spawned_{self.SpawnCounter}`
+	feedable:SetAttribute(
+		attributes.ItemId,
+		if typeof(templateItemId) == "string" and templateItemId ~= "" then templateItemId else template.Name
+	)
+	if typeof(templateDisplayName) == "string" and templateDisplayName ~= "" then
+		feedable:SetAttribute(attributes.DisplayName, templateDisplayName)
+	end
 	feedable.Parent = tierFolder
 
 	self.Context.services.FeedableService:ApplyFeedableAttributes(feedable, tierName)
